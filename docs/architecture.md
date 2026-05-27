@@ -13,9 +13,10 @@ Wayland, plugins, and GPU rendering.
 
 - Run as a native Wayland application.
 - Render the application UI on the GPU.
-- Host CLAP plugins first.
+- Host CLAP, LV2, and VST3 plugins in v1.
 - Use JACK first, with a path to native PipeWire later.
 - Embed native Wayland plugin UIs through `wayembed`.
+- Support XWayland plugin UIs through an isolated bridge.
 - Keep the realtime audio path allocation-free after startup.
 - Keep renderer, audio backend, plugin API, and UI embedding swappable.
 - Save and restore rack/session state.
@@ -24,8 +25,8 @@ Wayland, plugins, and GPU rendering.
 
 - Rebuild Element or JUCE.
 - Build a full DAW.
-- Host every plugin format in the first version.
-- Support X11 plugin UIs in the first version.
+- Host every plugin format.
+- Make X11 the application platform.
 - Let UI code or garbage collection enter the audio callback.
 - Bind every function in a dependency before the host needs it.
 
@@ -37,8 +38,9 @@ directly to C-shaped libraries:
 - Wayland client APIs for windows, surfaces, input, and frame timing.
 - `wgpu-native` for GPU rendering.
 - JACK for audio I/O.
-- CLAP for plugin hosting.
+- CLAP, LV2, and VST3 for plugin hosting.
 - `wayembed` for native Wayland plugin UI embedding.
+- XWayland/X11 bridge code for legacy plugin UI embedding.
 
 The audio engine may begin in Nim. That is acceptable if the realtime subset is
 strict. The callback uses preallocated memory, plain objects, raw pointers,
@@ -168,14 +170,28 @@ Native PipeWire can come later behind the same backend interface.
 
 ### Plugin Host
 
-CLAP is the first plugin API. The CLAP host layer owns discovery, loading,
-lifecycle, activation, process calls, parameters, events, state, and extension
-lookup.
+The v1 host supports CLAP, LV2, and VST3. CLAP remains the cleanest first
+implementation path because its ABI is plain C and its host model is modern,
+but the first user-facing release is not done until LV2 and VST3 plugins can
+load, process audio, expose parameters, and persist state.
 
-The first milestone loads one plugin. The second milestone scans a directory.
-The third persists plugin state in a rack file.
+Each plugin API gets an adapter behind the same internal model:
 
-LV2 and VST3 are later decisions. They should not shape the first engine.
+- descriptor and metadata
+- audio and event ports
+- parameters
+- activation/deactivation
+- process callback
+- state save/restore
+- UI capability discovery
+
+The engine should not become CLAP-shaped, LV2-shaped, or VST3-shaped. Those
+formats are edge adapters. The rack graph processes nodes through one internal
+plugin instance interface.
+
+The first plugin milestone may still load one CLAP plugin by path. The v1
+plugin milestone loads one CLAP, one LV2, and one VST3 plugin by path before
+directory scanning matters.
 
 ### Plugin UI Embedding
 
@@ -186,8 +202,17 @@ For v1, plugin UI policy is strict:
 
 - native Wayland plugin UIs are supported through `wayembed`
 - generated parameter UIs are always available
-- X11 plugin UIs are not a v1 target
+- XWayland plugin UIs are supported through an isolated bridge
 - plugin UI failure must not stop audio processing
+
+The XWayland path is a compatibility layer, not the center of the app. It
+should live behind a plugin UI bridge boundary, and it may need a helper process
+or a tightly contained X11/XCB module. The native Wayland UI must not depend on
+X11 for its own windowing, input, or rendering.
+
+The bridge has one job: make existing LV2/VST3 plugin editors usable when they
+only expose X11 UI handles. If embedding is unreliable for a plugin, `nilrack`
+falls back to generated controls and keeps audio running.
 
 ### Session Model
 
@@ -256,12 +281,31 @@ The second build should load one CLAP plugin by path:
 
 ## Third Milestone
 
-The third build should prove the reason this project exists:
+The third build expands plugin coverage:
+
+1. Load one LV2 plugin by path or URI.
+2. Load one VST3 plugin by path.
+3. Map CLAP, LV2, and VST3 parameters into the same internal model.
+4. Save and restore state for all three formats.
+5. Keep generated controls available for every loaded plugin.
+
+## Fourth Milestone
+
+The fourth build should prove the reason this project exists:
 
 1. Embed a native Wayland plugin UI with `wayembed`.
 2. Keep generated controls available as a fallback.
 3. Route input and focus correctly.
 4. Keep audio running when the embedded UI fails or closes.
+
+## Fifth Milestone
+
+The fifth build makes legacy plugin editors usable:
+
+1. Show an XWayland LV2 or VST3 plugin editor.
+2. Keep the bridge isolated from the native Wayland shell.
+3. Route focus, pointer, keyboard, and resize events without stalling the app.
+4. Fall back to generated controls if the editor cannot embed cleanly.
 
 ## Open Questions
 
@@ -272,6 +316,8 @@ The third build should prove the reason this project exists:
 - How much of `wgpu-native` should be wrapped before we write the draw-list
   backend?
 - When native PipeWire arrives, does it replace JACK or sit beside it?
+- Should the XWayland plugin UI bridge be in-process or a helper process?
+- Which VST3 hosting layer gives us the least C++ surface area?
 
 ## Design Principle
 
