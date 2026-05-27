@@ -21,15 +21,6 @@ Wayland, plugins, and GPU rendering.
 - Keep renderer, audio backend, plugin API, and UI embedding swappable.
 - Save and restore rack/session state.
 
-## Non-Goals
-
-- Rebuild Element or JUCE.
-- Build a full DAW.
-- Host every plugin format.
-- Make X11 the application platform.
-- Let UI code or garbage collection enter the audio callback.
-- Bind every function in a dependency before the host needs it.
-
 ## Stack
 
 The first implementation uses Nim for the host and application code. Nim talks
