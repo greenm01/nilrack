@@ -9,3 +9,5 @@ supports XWayland plugin UIs through an isolated bridge.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/dod.md](docs/dod.md) for the working design.
+
+Project docs follow [docs/dreyer-style.md](docs/dreyer-style.md).
