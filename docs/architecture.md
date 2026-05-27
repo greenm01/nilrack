@@ -9,6 +9,9 @@ The project favors small owned boundaries over a large framework. Nim owns the
 application. C ABIs connect the pieces that need to speak to Linux audio,
 Wayland, plugins, and GPU rendering.
 
+The data model and mutation rules are described in
+[Data-Oriented Design](dod.md).
+
 ## Goals
 
 - Run as a native Wayland application.
