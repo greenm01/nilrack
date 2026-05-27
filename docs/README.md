@@ -13,4 +13,5 @@ and design principle. The domain docs below go deeper on each subsystem.
 - [session.md](session.md) — session model, KDL format, scan cache
 - [janet.md](janet.md) — scripting layer, event→command pattern, what Janet owns
 - [stack.md](stack.md) — all dependencies with rationale
+- [todo.md](todo.md) — build phases and milestone checklist
 - [dreyer-style.md](dreyer-style.md) — documentation style guide
