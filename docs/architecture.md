@@ -9,8 +9,14 @@ The project favors small owned boundaries over a large framework. Nim owns the
 application. C ABIs connect the pieces that need to speak to Linux audio,
 Wayland, plugins, and GPU rendering.
 
-The data model and mutation rules are described in
-[Data-Oriented Design](dod.md).
+Domain docs:
+[dod.md](dod.md) —
+[ui.md](ui.md) —
+[audio.md](audio.md) —
+[plugins.md](plugins.md) —
+[session.md](session.md) —
+[janet.md](janet.md) —
+[stack.md](stack.md)
 
 ## Goals
 
@@ -26,28 +32,17 @@ The data model and mutation rules are described in
 
 ## Stack
 
-The first implementation uses Nim for the host and application code. Nim talks
-directly to C-shaped libraries:
-
-- Wayland client APIs for windows, surfaces, input, and frame timing.
-- `wgpu-native` for GPU rendering.
-- JACK for audio I/O.
-- CLAP, LV2, and VST3 for plugin hosting.
-- `wayembed` for native Wayland plugin UI embedding.
-- XWayland/X11 bridge code for legacy plugin UI embedding.
-
-The audio engine may begin in Nim. That is acceptable if the realtime subset is
-strict. The callback uses preallocated memory, plain objects, raw pointers,
-fixed buffers, and no locks. If the Nim path fights us, the realtime core can
-move behind the same internal API later.
+Nim owns the host and application code. Dependency decisions and rationale are
+in [stack.md](stack.md).
 
 ## Process Model
 
 `nilrack` starts as one process.
 
 The UI thread owns Wayland dispatch, input routing, layout, renderer submission,
-plugin scanning, session I/O, and user commands. The audio thread is owned by
-JACK. It pulls immutable graph snapshots and consumes realtime-safe command
+session I/O, and user commands. Plugin scanning runs in a helper process —
+crashes during scan must not affect a running session. The audio thread is owned
+by JACK. It pulls immutable graph snapshots and consumes realtime-safe command
 queues.
 
 The audio callback never calls UI code. It never logs. It never allocates. It
@@ -83,139 +78,53 @@ Wayland details stay here unless a subsystem needs a raw handle.
 
 ### UI and Layout
 
-The UI layer owns the rack editor, plugin browser, generated parameter panels,
-transport/status views, meters, and dialogs. It emits a draw list. It does not
-call `wgpu-native` directly.
-
-The first UI model should be immediate enough to move quickly, but not sloppy.
-Widgets read application state, write commands, and emit draw operations. Long
-lived state lives in the session model, not in renderer objects.
+The UI follows TEA: the view function is a pure transform from `NilrackModel`
+to `NilDrawList + InputTargetList`. Input events become typed `Msg` values and
+enter the update loop. There is no widget framework. See [ui.md](ui.md).
 
 ### Renderer
 
 The renderer consumes a `NilDrawList`. `wgpu-native` is the first backend, not
-the application rendering model.
-
-The renderer interface should start small:
-
-- begin frame
-- resize
-- upload or update texture
-- submit draw list
-- end frame
-- shutdown
-
-The first draw commands are enough to build the host UI:
-
-- filled rectangle
-- rounded rectangle
-- border
-- line and polyline
-- text run
-- image
-- clip push/pop
-
-Later commands can add curves, gradients, waveform batches, scope batches, and
-instanced graph elements.
-
-A software or shared-memory debug backend is worth keeping. It gives us a way
-to test input, layout, and draw-list generation when GPU presentation is the
-suspect.
+the application rendering model. A software debug backend stays possible by
+keeping draw commands renderer-agnostic. See [ui.md](ui.md) for the draw
+command set.
 
 ### Audio Engine
 
-The audio engine owns the realtime graph. It knows about nodes, ports, buffers,
-MIDI/events, automation, and process order.
-
-At startup or graph edit time, it allocates:
-
-- audio buffers
-- event buffers
-- plugin process structures
-- graph nodes and edges
-- command queues
-- meter snapshots
-
-At callback time, it:
-
-- reads the current graph snapshot
-- drains realtime-safe control events
-- processes nodes in order
-- writes output buffers
-- publishes meters through a lock-free snapshot path
-
-The callback must not allocate, block, log, scan plugins, load files, create UI
-objects, or call Nim code that can allocate.
+The audio engine owns the realtime graph. At callback time it reads a compiled
+`ProcessPlan` and preallocated queues. It never allocates, logs, or touches
+application state. See [audio.md](audio.md).
 
 ### JACK Backend
 
-JACK is the first audio backend because it gives us a clear realtime callback
-and works well under PipeWire through pipewire-jack.
-
-The JACK layer should stay thin:
-
-- register ports
-- activate/deactivate client
-- translate JACK buffers into engine buffers
-- forward process callbacks
-- handle sample-rate and buffer-size changes
-
-Native PipeWire can come later behind the same backend interface.
+JACK owns the realtime callback and works under PipeWire via `pipewire-jack`.
+The JACK layer stays thin. Native PipeWire support comes later behind the same
+backend interface. See [audio.md](audio.md).
 
 ### Plugin Host
 
-The v1 host supports CLAP, LV2, and VST3. CLAP remains the cleanest first
-implementation path because its ABI is plain C and its host model is modern,
-but the first user-facing release is not done until LV2 and VST3 plugins can
-load, process audio, expose parameters, and persist state.
-
-Each plugin API gets an adapter behind the same internal model:
-
-- descriptor and metadata
-- audio and event ports
-- parameters
-- activation/deactivation
-- process callback
-- state save/restore
-- UI capability discovery
-
-The engine should not become CLAP-shaped, LV2-shaped, or VST3-shaped. Those
-formats are edge adapters. The rack graph processes nodes through one internal
-plugin instance interface.
-
-The first plugin milestone may still load one CLAP plugin by path. The v1
-plugin milestone loads one CLAP, one LV2, and one VST3 plugin by path before
-directory scanning matters.
+v1 hosts CLAP, LV2, and VST3 as adapters into one internal plugin model. The
+rack graph does not know which format produced a node. Plugin scanning runs
+out-of-process. See [plugins.md](plugins.md).
 
 ### Plugin UI Embedding
 
-`wayembed` is the native Wayland embedding layer. `nilrack` should link it as an
-internal dependency, not require users to install a `wayembed` runtime library.
-
-For v1, plugin UI policy is strict:
-
-- native Wayland plugin UIs are supported through `wayembed`
-- generated parameter UIs are always available
-- XWayland plugin UIs are supported through an isolated bridge
-- plugin UI failure must not stop audio processing
-
-The XWayland path is a compatibility layer, not the center of the app. It
-should live behind a plugin UI bridge boundary, and it may need a helper process
-or a tightly contained X11/XCB module. The native Wayland UI must not depend on
-X11 for its own windowing, input, or rendering.
-
-The bridge has one job: make existing LV2/VST3 plugin editors usable when they
-only expose X11 UI handles. If embedding is unreliable for a plugin, `nilrack`
-falls back to generated controls and keeps audio running.
+Native Wayland plugin UIs embed through `wayembed`. XWayland plugin UIs go
+through an isolated bridge. Generated parameter controls are always available.
+Plugin UI failure must not stop audio processing. See [plugins.md](plugins.md).
 
 ### Session Model
 
-The session model stores the rack graph, plugin references, parameter values,
-connections, MIDI mappings, UI layout, and plugin state blobs.
+The session stores the rack graph, plugin references, parameter values,
+connections, MIDI mappings, UI layout, and plugin state blobs. The file format
+is KDL via `nimkdl`. See [session.md](session.md).
 
-The file format should be boring and inspectable. KDL is a good candidate
-because the existing ecosystem already uses it. Binary blobs can be external
-files or encoded fields after the basic model works.
+### Janet Scripting
+
+Janet is embedded from the start. It handles MIDI and parameter mapping, rack
+automation, hotkey bindings, and session macros. It dispatches `Msg` values
+into the update loop — the same command API used by IPC and the UI. See
+[janet.md](janet.md).
 
 ## Threading Rules
 
@@ -227,7 +136,7 @@ Allowed:
 - raw pointers
 - preallocated ring buffers
 - plain arithmetic
-- CLAP process calls
+- CLAP, LV2, VST3 process calls via compiled plan
 - atomic reads/writes with a clear ownership model
 
 Forbidden:
@@ -300,18 +209,6 @@ The fifth build makes legacy plugin editors usable:
 2. Keep the bridge isolated from the native Wayland shell.
 3. Route focus, pointer, keyboard, and resize events without stalling the app.
 4. Fall back to generated controls if the editor cannot embed cleanly.
-
-## Open Questions
-
-- Which Nim Wayland binding should own the first platform layer, or should the
-  first pass bind only the calls we need?
-- Should KDL be the rack file format from day one?
-- Should plugin scanning run in-process or in a helper process?
-- How much of `wgpu-native` should be wrapped before we write the draw-list
-  backend?
-- When native PipeWire arrives, does it replace JACK or sit beside it?
-- Should the XWayland plugin UI bridge be in-process or a helper process?
-- Which VST3 hosting layer gives us the least C++ surface area?
 
 ## Design Principle
 

@@ -41,6 +41,93 @@ platform/plugin/audio adapter
 External handles are fields in records. They are not the source of truth for
 relationships.
 
+## Main Loop
+
+The UI thread runs a TEA loop. Every event — Wayland input, IPC command, audio
+snapshot, Janet message, plugin event — enters as a typed `Msg`. The update
+function routes each `Msg` to the right operation module. The view function
+produces `NilDrawList + InputTargetList` from the current model state.
+
+```text
+Msg (Wayland / IPC / Janet / audio snapshot / plugin event)
+        |
+        v
+update(model, msg) → effect queue
+        |
+        v
+drain effects → further operations
+        |
+        v
+view(model) → NilDrawList + InputTargetList
+```
+
+Operations maintain indexes. Effects schedule deferred work. The view function
+is pure — it reads the model and emits draw and hit-test data. See
+[ui.md](ui.md) for the full TEA description.
+
+## Passing the Model
+
+`NilrackModel` is large. Never copy it except at explicit snapshot boundaries.
+Use Nim's borrow semantics to make the intent clear at every call site.
+
+**`var NilrackModel`** — mutation. Operations and the update function take the
+model by `var`. This is a mutable borrow, not a copy.
+
+```nim
+proc rackCreate*(m: var NilrackModel, name: string): RackId = ...
+proc nodeDestroy*(m: var NilrackModel, id: NodeId) = ...
+proc update*(m: var NilrackModel, msg: Msg): seq[Effect] = ...
+```
+
+**`lent NilrackModel`** — read-only access. Queries, iterators, the view
+function, and systems in their read phase take the model as `lent`. No copy,
+no mutation — enforced by the type system.
+
+```nim
+proc node*(m: lent NilrackModel, id: NodeId): lent NodeData = ...
+proc view*(m: lent NilrackModel): NilDrawList = ...
+proc cablesForRack*(m: lent NilrackModel, id: RackId): ... = ...
+```
+
+**Explicit copy** — snapshots only. Thread and API boundaries get copies, not
+references. `ProcessPlan` is a copy for the audio thread. A session snapshot
+is a copy for serialization. Name the type to make the copy intentional.
+
+```nim
+proc compileProcessPlan*(m: lent NilrackModel): ProcessPlan = ...
+proc sessionSnapshot*(m: lent NilrackModel): SessionSnapshot = ...
+```
+
+**`ref NilrackModel`** — do not use. Heap allocation, GC pressure, and unclear
+ownership. The model lives as a value in the app shell and is passed by `var`
+or `lent` as needed.
+
+### EntityManager Records
+
+The same rules apply to records inside the entity manager.
+
+`get` returns `lent T` — a read-only borrow into the dense array. `getMutable`
+returns `var T` — an in-place mutable reference, no copy. Use `getMutable` in
+operations when updating a field. Use `get` everywhere else.
+
+```nim
+let node = m.nodes.get(id)          # lent NodeData, no copy
+var node = m.nodes.getMutable(id)   # var NodeData, in-place mutation
+node.bypassed = true
+```
+
+### Query Results
+
+Queries that return IDs or scalars return by value — IDs are small.
+
+Queries that return collections should prefer iterators or caller-supplied
+output buffers over allocating a new `seq`. Hot paths in the view function,
+hit testing, and audio graph compilation must not allocate per-frame.
+
+Allocation is acceptable in snapshots, session I/O, diagnostics, plugin
+scanning results, and tests. Mark allocation-heavy helpers clearly so callers
+do not use them on hot paths.
+
 ## Module Layout
 
 The first shape should stay close to Triad's Nim layout.
