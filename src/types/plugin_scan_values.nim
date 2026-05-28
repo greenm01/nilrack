@@ -15,3 +15,11 @@ type
     timedOut*: bool
     output*: string
     error*: string
+
+  PluginScanFailedEntry* = object
+    path*: string
+    mtime*: int64
+    reason*: PluginScanFailureReason
+    exitCode*: int
+    timedOut*: bool
+    error*: string

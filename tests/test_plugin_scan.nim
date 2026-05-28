@@ -1,4 +1,4 @@
-import std/[os, unittest]
+import std/[options, os, tables, unittest]
 
 import kdl
 
@@ -81,6 +81,117 @@ suite "plugin scan":
     check doc[0].props["exit-code"].get(int) == -1
     check doc[0].props["timed-out"].get(bool)
     check doc[0].props["error"].get(string) == "scanner timed out"
+
+  test "round-trips failed scan cache entries":
+    let cases = [
+      (
+        reason: psfrTimeout,
+        reasonName: "timeout",
+        exitCode: -1,
+        timedOut: true,
+        error: "scanner timed out",
+      ),
+      (
+        reason: psfrNonZeroExit,
+        reasonName: "non-zero-exit",
+        exitCode: 2,
+        timedOut: false,
+        error: "scanner exited non-zero",
+      ),
+      (
+        reason: psfrEmptyOutput,
+        reasonName: "empty-output",
+        exitCode: 0,
+        timedOut: false,
+        error: "scanner produced no output",
+      ),
+      (
+        reason: psfrMalformedKdl,
+        reasonName: "malformed-kdl",
+        exitCode: 0,
+        timedOut: false,
+        error: "expected node",
+      ),
+    ]
+
+    for item in cases:
+      let entry = PluginScanFailedEntry(
+        path: "/tmp/broken.clap",
+        mtime: 789,
+        reason: item.reason,
+        exitCode: item.exitCode,
+        timedOut: item.timedOut,
+        error: item.error,
+      )
+
+      let doc = parseKdl(scanFailedEntryToKdl(entry))
+      check doc[0].props["reason"].get(string) == item.reasonName
+
+      let parsed = parseScanFailedEntry(doc)
+      check parsed.isSome
+      check parsed.get == entry
+
+  test "builds failed cache entries from process results":
+    let result = PluginScanProcessResult(
+      ok: false,
+      reason: psfrMalformedKdl,
+      exitCode: 0,
+      timedOut: false,
+      output: "plugin-scan {",
+      error: "parse failed",
+    )
+
+    let entry = failedEntryFromScanResult("/tmp/broken.clap", 123, result)
+    check entry.path == "/tmp/broken.clap"
+    check entry.mtime == 123
+    check entry.reason == psfrMalformedKdl
+    check entry.exitCode == 0
+    check not entry.timedOut
+    check entry.error == "parse failed"
+
+  test "rejects invalid failed scan cache nodes":
+    let baseEntry = PluginScanFailedEntry(
+      path: "/tmp/a.clap",
+      mtime: 1,
+      reason: psfrTimeout,
+      exitCode: 1,
+      timedOut: false,
+      error: "failed",
+    )
+
+    var okNode = scanFailedEntryToKdlDoc(baseEntry)
+    okNode[0].props["status"] = initKVal("ok")
+    check parseScanFailedEntry(okNode).isNone
+
+    var missingReason = scanFailedEntryToKdlDoc(baseEntry)
+    missingReason[0].props.del("reason")
+    check parseScanFailedEntry(missingReason).isNone
+
+    var unsupportedSchema = scanFailedEntryToKdlDoc(baseEntry)
+    unsupportedSchema[0].props["schema"] = initKVal(PluginScanSchemaVersion + 1)
+    check parseScanFailedEntry(unsupportedSchema).isNone
+
+    var unknownReason = scanFailedEntryToKdlDoc(baseEntry)
+    unknownReason[0].props["reason"] = initKVal("unknown")
+    check parseScanFailedEntry(unknownReason).isNone
+
+    var noneReason = scanFailedEntryToKdlDoc(baseEntry)
+    noneReason[0].props["reason"] = initKVal("none")
+    check parseScanFailedEntry(noneReason).isNone
+
+  test "matches failed scan cache entries by path and mtime":
+    let entry = PluginScanFailedEntry(
+      path: "/tmp/broken.clap",
+      mtime: 456,
+      reason: psfrTimeout,
+      exitCode: -1,
+      timedOut: true,
+      error: "scanner timed out",
+    )
+
+    check entry.scanFailedEntryMatches("/tmp/broken.clap", 456)
+    check not entry.scanFailedEntryMatches("/tmp/other.clap", 456)
+    check not entry.scanFailedEntryMatches("/tmp/broken.clap", 457)
 
   test "scanner process runner accepts valid KDL output":
     let printfExe = findExe("printf")

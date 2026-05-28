@@ -1,4 +1,4 @@
-import std/[os, osproc, streams, strutils, tables, times]
+import std/[options, os, osproc, streams, strutils, tables, times]
 
 import kdl
 
@@ -30,6 +30,21 @@ proc failureReasonName(reason: PluginScanFailureReason): string =
   of psfrNonZeroExit: "non-zero-exit"
   of psfrEmptyOutput: "empty-output"
   of psfrMalformedKdl: "malformed-kdl"
+
+proc parseFailureReason(name: string): Option[PluginScanFailureReason] =
+  case name
+  of "none":
+    some(psfrNone)
+  of "timeout":
+    some(psfrTimeout)
+  of "non-zero-exit":
+    some(psfrNonZeroExit)
+  of "empty-output":
+    some(psfrEmptyOutput)
+  of "malformed-kdl":
+    some(psfrMalformedKdl)
+  else:
+    none(PluginScanFailureReason)
 
 proc props(pairs: openArray[KdlProp]): Table[string, KdlVal] =
   result = initTable[string, KdlVal](pairs.len)
@@ -149,9 +164,19 @@ proc scanDescriptorToKdlDoc*(descriptor: PluginDescriptor, mtime: int64 = 0): Kd
 proc scanDescriptorToKdl*(descriptor: PluginDescriptor, mtime: int64 = 0): string =
   pretty(scanDescriptorToKdlDoc(descriptor, mtime))
 
-proc scanFailureToKdlDoc*(
+proc failedEntryFromScanResult*(
     path: string, mtime: int64, scanResult: PluginScanProcessResult
-): KdlDoc =
+): PluginScanFailedEntry =
+  PluginScanFailedEntry(
+    path: path,
+    mtime: mtime,
+    reason: scanResult.reason,
+    exitCode: scanResult.exitCode,
+    timedOut: scanResult.timedOut,
+    error: scanResult.error,
+  )
+
+proc scanFailedEntryToKdlDoc*(entry: PluginScanFailedEntry): KdlDoc =
   @[
     initKNode(
       "plugin-scan",
@@ -159,21 +184,68 @@ proc scanFailureToKdlDoc*(
         [
           prop("schema", PluginScanSchemaVersion.uint32),
           prop("status", "failed"),
-          prop("path", path),
-          prop("mtime", mtime),
-          prop("reason", scanResult.reason.failureReasonName()),
-          prop("exit-code", scanResult.exitCode),
-          prop("timed-out", scanResult.timedOut),
-          prop("error", scanResult.error),
+          prop("path", entry.path),
+          prop("mtime", entry.mtime),
+          prop("reason", entry.reason.failureReasonName()),
+          prop("exit-code", entry.exitCode),
+          prop("timed-out", entry.timedOut),
+          prop("error", entry.error),
         ]
       ),
     )
   ]
 
+proc scanFailedEntryToKdl*(entry: PluginScanFailedEntry): string =
+  pretty(scanFailedEntryToKdlDoc(entry))
+
+proc scanFailureToKdlDoc*(
+    path: string, mtime: int64, scanResult: PluginScanProcessResult
+): KdlDoc =
+  scanFailedEntryToKdlDoc(failedEntryFromScanResult(path, mtime, scanResult))
+
 proc scanFailureToKdl*(
     path: string, mtime: int64, scanResult: PluginScanProcessResult
 ): string =
   pretty(scanFailureToKdlDoc(path, mtime, scanResult))
+
+proc parseScanFailedEntry*(node: KdlNode): Option[PluginScanFailedEntry] =
+  if node.name != "plugin-scan":
+    return none(PluginScanFailedEntry)
+  for key in [
+    "schema", "status", "path", "mtime", "reason", "exit-code", "timed-out", "error"
+  ]:
+    if not node.props.hasKey(key):
+      return none(PluginScanFailedEntry)
+  try:
+    if node.props["schema"].get(uint32) != PluginScanSchemaVersion.uint32:
+      return none(PluginScanFailedEntry)
+    if node.props["status"].get(string) != "failed":
+      return none(PluginScanFailedEntry)
+    let reason = parseFailureReason(node.props["reason"].get(string))
+    if reason.isNone or reason.get == psfrNone:
+      return none(PluginScanFailedEntry)
+    some(
+      PluginScanFailedEntry(
+        path: node.props["path"].get(string),
+        mtime: node.props["mtime"].get(int64),
+        reason: reason.get,
+        exitCode: node.props["exit-code"].get(int),
+        timedOut: node.props["timed-out"].get(bool),
+        error: node.props["error"].get(string),
+      )
+    )
+  except CatchableError:
+    none(PluginScanFailedEntry)
+
+proc parseScanFailedEntry*(doc: KdlDoc): Option[PluginScanFailedEntry] =
+  if doc.len != 1:
+    return none(PluginScanFailedEntry)
+  parseScanFailedEntry(doc[0])
+
+proc scanFailedEntryMatches*(
+    entry: PluginScanFailedEntry, path: string, mtime: int64
+): bool =
+  entry.path == path and entry.mtime == mtime
 
 proc pluginMtime*(path: string): int64 =
   if not fileExists(path) and not dirExists(path):

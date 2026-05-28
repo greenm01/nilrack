@@ -183,7 +183,7 @@ results. Show available plugins in a browser. See [plugins.md](plugins.md).
   enforce timeout, and collect exit status
 - [x] Scan result schema in KDL: path, mtime, descriptor, ports, params,
   UI caps, scan status, typed failure reason
-- [ ] `ScanFailed` cache entries for timeout, non-zero exit, empty output, and
+- [x] `ScanFailed` cache entries for timeout, non-zero exit, empty output, and
   malformed KDL
 - [ ] Disk cache: temp-write, fsync, rename via `nimkdl`, skip unchanged plugins
 - [ ] User-triggered rescan replaces a failed cache entry for the same path
