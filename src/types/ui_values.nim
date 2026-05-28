@@ -1,4 +1,5 @@
 import core
+import diagnostic_values
 
 type
   InputTargetEntry* = object
@@ -38,5 +39,7 @@ type
       keyCode*: uint32
     of msgResize:
       resizeW*, resizeH*: int32
+    of msgAudioSnapshot:
+      diagnostics*: RuntimeDiagnosticsSnapshot
     else:
       discard
