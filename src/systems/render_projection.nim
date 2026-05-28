@@ -38,6 +38,53 @@ proc addTarget(
     )
   )
 
+proc layoutHostIoNodes(list: var NilDrawList, model: NilrackModel) =
+  let inputPanel = Color(r: 0.13, g: 0.20, b: 0.18, a: 1.0)
+  let outputPanel = Color(r: 0.20, g: 0.15, b: 0.17, a: 1.0)
+  let header = Color(r: 0.23, g: 0.25, b: 0.25, a: 1.0)
+  let text = Color(r: 0.88, g: 0.91, b: 0.90, a: 1.0)
+  let mutedText = Color(r: 0.61, g: 0.67, b: 0.66, a: 1.0)
+  let portColor = Color(r: 0.47, g: 0.70, b: 0.58, a: 1.0)
+
+  for node in model.nodes.data:
+    if node.kind == nkPlugin:
+      continue
+    let x = node.x
+    let y = node.y
+    let w = if node.w > 0.0'f32: node.w else: 240.0'f32
+    let h = if node.h > 0.0'f32: node.h else: 96.0'f32
+    let panel = if node.kind == nkInput: inputPanel else: outputPanel
+
+    list.addRect(x, y, w, h, panel)
+    list.addRect(x, y, w, 28.0'f32, header)
+    list.addTextRun(x + 12.0'f32, y + 8.0'f32, shortText(node.name, 22), text)
+
+    for portId in model.portIdsForNode(node.id):
+      let port = model.portData(portId)
+      if port.isNone or port.get.kind != pkAudio:
+        continue
+      let p = port.get
+      let px =
+        if p.direction == pdOut:
+          x + w - 18.0'f32
+        else:
+          x + 10.0'f32
+      let py = y + 52.0'f32
+      list.addRect(px, py, 10.0'f32, 10.0'f32, portColor)
+      let channels =
+        if p.channelCount > 0:
+          $p.channelCount & "ch "
+        else:
+          ""
+      if p.direction == pdOut:
+        list.addTextRun(
+          x + 26.0'f32, py - 3.0'f32, channels & shortText(p.name, 14), mutedText
+        )
+      else:
+        list.addTextRun(
+          px + 18.0'f32, py - 3.0'f32, channels & shortText(p.name, 14), mutedText
+        )
+
 proc layoutPluginNodes(
     list: var NilDrawList, targets: var InputTargetList, model: NilrackModel
 ) =
@@ -134,4 +181,5 @@ proc project*(
   list.clear()
   targets.clearTargets()
   list.layoutShell(width, height, meterIn, meterOut)
+  list.layoutHostIoNodes(model)
   list.layoutPluginNodes(targets, model)

@@ -11,7 +11,7 @@ proc attachPluginDescriptor*(
 ): PluginAttachResult =
   let rackId = m.firstRackIdOrCreateDefault()
   let nodeId = m.nodeCreate(rackId, nkPlugin, descriptor.name)
-  m.nodeMove(nodeId, 64.0'f32, 72.0'f32)
+  m.nodeMove(nodeId, 400.0'f32, 96.0'f32)
   m.nodeResize(
     nodeId,
     340.0'f32,

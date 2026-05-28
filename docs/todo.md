@@ -175,7 +175,7 @@ general plugin host.
 ## Phase 3 — Plugin Scanner
 
 Scan CLAP, LV2, and VST3 directories without risking the host process. Cache
-results. Show available plugins in a browser. See [plugins.md](plugins.md).
+results. See [plugins.md](plugins.md).
 
 - [x] `--scan-plugin <path>` mode in `nilrack.nim`: load plugin, write KDL to
   stdout, exit
@@ -187,8 +187,26 @@ results. Show available plugins in a browser. See [plugins.md](plugins.md).
   malformed KDL
 - [x] Disk cache: temp-write, fsync, rename via `nimkdl`, skip unchanged plugins
 - [x] User-triggered rescan replaces a failed cache entry for the same path
-- [ ] Plugin browser UI: list scanned plugins, filter by format and name
-- [ ] Drag plugin from browser to rack canvas → nodeCreate + pluginAttachToNode
+
+---
+
+## Phase 3B — Live Rack Canvas
+
+Make nilrack usable as a small live plugin test bench before native plugin
+editors. Generated controls are the required plugin UI for this phase; native
+Wayland and XWayland editors remain later phases.
+
+- [x] JACK input and output nodes visible on the rack canvas
+- [ ] Plugin browser UI from scan cache: list scanned plugins, filter by format
+  and name
+- [ ] Add or drag a CLAP plugin from the browser to the rack canvas
+- [ ] Rack canvas pan and zoom
+- [ ] Move, bypass, and delete plugin nodes
+- [ ] Create, select, and delete audio cables between ports
+- [ ] Route `Input -> Plugin -> Output`
+- [ ] Recompile and publish the process plan after graph edits
+- [ ] Generated parameter controls for the selected plugin
+- [ ] Meters and graph/runtime errors visible for live debugging
 
 ---
 

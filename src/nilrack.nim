@@ -114,6 +114,8 @@ when isMainModule:
   var activeAttach: PluginAttachResult
   var runtimeStore: PluginRuntimeStore
   var model = NilrackModel()
+  let defaultRackId = model.firstRackIdOrCreateDefault()
+  discard model.ensureRackAudioIoNodes(defaultRackId)
   if args.clapPath.len > 0:
     let clap = loadClapPlugin(args.clapPath)
     if not clap.ok:
