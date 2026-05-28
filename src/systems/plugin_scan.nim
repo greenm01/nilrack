@@ -1,4 +1,4 @@
-import std/[options, os, osproc, streams, strutils, tables, times]
+import std/[options, os, osproc, posix, streams, strutils, tables, times]
 
 import kdl
 
@@ -164,6 +164,31 @@ proc scanDescriptorToKdlDoc*(descriptor: PluginDescriptor, mtime: int64 = 0): Kd
 proc scanDescriptorToKdl*(descriptor: PluginDescriptor, mtime: int64 = 0): string =
   pretty(scanDescriptorToKdlDoc(descriptor, mtime))
 
+proc scanNodePathMtime(node: KdlNode, path: var string, mtime: var int64): bool =
+  if node.name != "plugin-scan":
+    return false
+  for key in ["schema", "status", "path", "mtime"]:
+    if not node.props.hasKey(key):
+      return false
+  try:
+    if node.props["schema"].get(uint32) != PluginScanSchemaVersion.uint32:
+      return false
+    path = node.props["path"].get(string)
+    mtime = node.props["mtime"].get(int64)
+    true
+  except CatchableError:
+    false
+
+proc scanNodeMatches(node: KdlNode, path: string, mtime: int64): bool =
+  var nodePath: string
+  var nodeMtime: int64
+  node.scanNodePathMtime(nodePath, nodeMtime) and nodePath == path and nodeMtime == mtime
+
+proc scanNodeMatchesPath(node: KdlNode, path: string): bool =
+  var nodePath: string
+  var nodeMtime: int64
+  node.scanNodePathMtime(nodePath, nodeMtime) and nodePath == path
+
 proc failedEntryFromScanResult*(
     path: string, mtime: int64, scanResult: PluginScanProcessResult
 ): PluginScanFailedEntry =
@@ -247,6 +272,112 @@ proc scanFailedEntryMatches*(
 ): bool =
   entry.path == path and entry.mtime == mtime
 
+proc loadScanCache*(cachePath: string): KdlDoc =
+  if not fileExists(cachePath):
+    return @[]
+  try:
+    parseKdl(readFile(cachePath))
+  except CatchableError:
+    @[]
+
+proc findCachedScanNode*(
+    cache: KdlDoc, pluginPath: string, mtime: int64
+): Option[KdlNode] =
+  for node in cache:
+    if node.scanNodeMatches(pluginPath, mtime):
+      return some(node)
+  none(KdlNode)
+
+proc upsertScanCacheNode*(cache: var KdlDoc, node: KdlNode) =
+  var nodePath: string
+  var nodeMtime: int64
+  if not node.scanNodePathMtime(nodePath, nodeMtime):
+    return
+  var kept: KdlDoc = @[]
+  for existing in cache:
+    if not existing.scanNodeMatchesPath(nodePath):
+      kept.add(existing)
+  kept.add(node)
+  cache = kept
+
+proc syncParentDir(path: string) =
+  let dir = parentDir(path)
+  if dir.len == 0:
+    return
+  let fd = posix.open(dir.cstring, O_RDONLY)
+  if fd >= 0:
+    discard posix.fsync(fd)
+    discard posix.close(fd)
+
+proc writeAll(fd: cint, text: string): bool =
+  var written = 0
+  while written < text.len:
+    let count =
+      posix.write(fd, cast[pointer](unsafeAddr text[written]), text.len - written)
+    if count <= 0:
+      return false
+    written += count
+  true
+
+proc saveScanCache*(cachePath: string, cache: KdlDoc): bool =
+  let dir = parentDir(cachePath)
+  if dir.len > 0:
+    createDir(dir)
+
+  let tempPath = cachePath & ".tmp"
+  let fd = posix.open(tempPath.cstring, O_CREAT or O_WRONLY or O_TRUNC, Mode(0o600))
+  if fd < 0:
+    return false
+
+  let text = pretty(cache)
+  result = writeAll(fd, text)
+  if result:
+    result = posix.fsync(fd) == 0
+  if posix.close(fd) != 0:
+    result = false
+
+  if not result:
+    discard tryRemoveFile(tempPath)
+    return false
+
+  try:
+    moveFile(tempPath, cachePath)
+    syncParentDir(cachePath)
+    result = true
+  except OSError:
+    discard tryRemoveFile(tempPath)
+    result = false
+
+proc cachedNodeToProcessResult(node: KdlNode): Option[PluginScanProcessResult] =
+  try:
+    if not node.props.hasKey("status"):
+      return none(PluginScanProcessResult)
+    case node.props["status"].get(string)
+    of "ok":
+      some(
+        PluginScanProcessResult(
+          ok: true, reason: psfrNone, exitCode: 0, output: pretty(@[node])
+        )
+      )
+    of "failed":
+      let entry = parseScanFailedEntry(node)
+      if entry.isNone:
+        return none(PluginScanProcessResult)
+      some(
+        PluginScanProcessResult(
+          ok: false,
+          reason: entry.get.reason,
+          exitCode: entry.get.exitCode,
+          timedOut: entry.get.timedOut,
+          output: scanFailedEntryToKdl(entry.get),
+          error: entry.get.error,
+        )
+      )
+    else:
+      none(PluginScanProcessResult)
+  except CatchableError:
+    none(PluginScanProcessResult)
+
 proc pluginMtime*(path: string): int64 =
   if not fileExists(path) and not dirExists(path):
     return 0
@@ -313,3 +444,32 @@ proc scanPluginWithHelper*(
     scannerExe, pluginPath: string, timeoutMs: int = PluginScanTimeoutMs
 ): PluginScanProcessResult =
   runPluginScannerProcess(scannerExe, ["--scan-plugin", pluginPath], timeoutMs)
+
+proc scanPluginWithCache*(
+    scannerExe, pluginPath, cachePath: string, timeoutMs: int = PluginScanTimeoutMs
+): PluginScanProcessResult =
+  let mtime = pluginMtime(pluginPath)
+  var cache = loadScanCache(cachePath)
+
+  let cached = cache.findCachedScanNode(pluginPath, mtime)
+  if cached.isSome:
+    let cachedResult = cachedNodeToProcessResult(cached.get)
+    if cachedResult.isSome:
+      return cachedResult.get
+
+  result = scanPluginWithHelper(scannerExe, pluginPath, timeoutMs)
+  if result.ok:
+    try:
+      let doc = parseKdl(result.output)
+      for node in doc:
+        if node.scanNodeMatches(pluginPath, mtime):
+          cache.upsertScanCacheNode(node)
+          discard saveScanCache(cachePath, cache)
+          return result
+    except CatchableError:
+      discard
+  else:
+    cache.upsertScanCacheNode(
+      scanFailedEntryToKdlDoc(failedEntryFromScanResult(pluginPath, mtime, result))[0]
+    )
+    discard saveScanCache(cachePath, cache)

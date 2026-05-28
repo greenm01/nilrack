@@ -5,46 +5,62 @@ import kdl
 import ../src/systems/plugin_scan
 import ../src/types/[model, plugin_scan_values, plugin_values]
 
+proc scanTestDir(label: string): string =
+  result =
+    getTempDir() / ("nilrack-plugin-scan-" & $getCurrentProcessId() & "-" & label)
+  if dirExists(result):
+    removeDir(result)
+  createDir(result)
+
+proc exampleDescriptor(path: string): PluginDescriptor =
+  PluginDescriptor(
+    api: paClap,
+    path: path,
+    uri: "dev.nilrack.example",
+    name: "Example",
+    vendor: "niltempus",
+    version: "1.0.0",
+    description: "test plugin",
+    hasState: true,
+    ports:
+      @[
+        PluginPortDescriptor(
+          index: 0,
+          externalId: 7,
+          name: "Audio In",
+          kind: pkAudio,
+          direction: pdIn,
+          channelCount: 2,
+          isMain: true,
+          portType: "stereo",
+        )
+      ],
+    params:
+      @[
+        PluginParamDescriptor(
+          index: 0,
+          externalId: 100,
+          name: "Gain",
+          modulePath: "Input",
+          minVal: 0.0,
+          maxVal: 1.0,
+          defaultVal: 0.5,
+          currentVal: 0.75,
+          displayText: "0.75",
+          automatable: true,
+        )
+      ],
+  )
+
+proc writeScanHelper(path, output: string) =
+  writeFile(
+    path, "#!/bin/sh\ncat <<'NILRACK_SCAN_EOF'\n" & output & "\nNILRACK_SCAN_EOF\n"
+  )
+  setFilePermissions(path, {fpUserRead, fpUserWrite, fpUserExec})
+
 suite "plugin scan":
   test "formats plugin descriptor scan result as KDL":
-    let descriptor = PluginDescriptor(
-      api: paClap,
-      path: "/tmp/example.clap",
-      uri: "dev.nilrack.example",
-      name: "Example",
-      vendor: "niltempus",
-      version: "1.0.0",
-      description: "test plugin",
-      hasState: true,
-      ports:
-        @[
-          PluginPortDescriptor(
-            index: 0,
-            externalId: 7,
-            name: "Audio In",
-            kind: pkAudio,
-            direction: pdIn,
-            channelCount: 2,
-            isMain: true,
-            portType: "stereo",
-          )
-        ],
-      params:
-        @[
-          PluginParamDescriptor(
-            index: 0,
-            externalId: 100,
-            name: "Gain",
-            modulePath: "Input",
-            minVal: 0.0,
-            maxVal: 1.0,
-            defaultVal: 0.5,
-            currentVal: 0.75,
-            displayText: "0.75",
-            automatable: true,
-          )
-        ],
-    )
+    let descriptor = exampleDescriptor("/tmp/example.clap")
 
     let doc = parseKdl(scanDescriptorToKdl(descriptor, 123))
     check doc.len == 1
@@ -192,6 +208,127 @@ suite "plugin scan":
     check entry.scanFailedEntryMatches("/tmp/broken.clap", 456)
     check not entry.scanFailedEntryMatches("/tmp/other.clap", 456)
     check not entry.scanFailedEntryMatches("/tmp/broken.clap", 457)
+
+  test "writes and reads scan cache entries":
+    let dir = scanTestDir("read-write")
+    defer:
+      removeDir(dir)
+    let cachePath = dir / "scan-cache.kdl"
+    let okNode = scanDescriptorToKdlDoc(exampleDescriptor("/tmp/example.clap"), 123)[0]
+    let failedNode = scanFailedEntryToKdlDoc(
+      PluginScanFailedEntry(
+        path: "/tmp/broken.clap",
+        mtime: 456,
+        reason: psfrTimeout,
+        exitCode: -1,
+        timedOut: true,
+        error: "scanner timed out",
+      )
+    )[0]
+
+    var cache: KdlDoc = @[okNode, failedNode]
+    check saveScanCache(cachePath, cache)
+
+    let loaded = loadScanCache(cachePath)
+    check loaded.len == 2
+    check loaded.findCachedScanNode("/tmp/example.clap", 123).isSome
+    check loaded.findCachedScanNode("/tmp/broken.clap", 456).isSome
+
+  test "scan cache hit returns ok result without helper":
+    let dir = scanTestDir("ok-hit")
+    defer:
+      removeDir(dir)
+    let cachePath = dir / "scan-cache.kdl"
+    let pluginPath = dir / "plugin.clap"
+    writeFile(pluginPath, "plugin")
+    let mtime = pluginMtime(pluginPath)
+    var cache = scanDescriptorToKdlDoc(exampleDescriptor(pluginPath), mtime)
+    check saveScanCache(cachePath, cache)
+
+    let result = scanPluginWithCache(dir / "missing-helper", pluginPath, cachePath, 100)
+    check result.ok
+    check result.reason == psfrNone
+    check parseKdl(result.output)[0].props["path"].get(string) == pluginPath
+
+  test "scan cache hit returns failed result without helper":
+    let dir = scanTestDir("failed-hit")
+    defer:
+      removeDir(dir)
+    let cachePath = dir / "scan-cache.kdl"
+    let pluginPath = dir / "plugin.clap"
+    writeFile(pluginPath, "plugin")
+    let mtime = pluginMtime(pluginPath)
+    var cache = scanFailedEntryToKdlDoc(
+      PluginScanFailedEntry(
+        path: pluginPath,
+        mtime: mtime,
+        reason: psfrNonZeroExit,
+        exitCode: 2,
+        timedOut: false,
+        error: "scanner exited non-zero",
+      )
+    )
+    check saveScanCache(cachePath, cache)
+
+    let result = scanPluginWithCache(dir / "missing-helper", pluginPath, cachePath, 100)
+    check not result.ok
+    check result.reason == psfrNonZeroExit
+    check result.exitCode == 2
+    check result.error == "scanner exited non-zero"
+
+  test "scan cache mtime miss runs helper and updates cache":
+    let dir = scanTestDir("mtime-miss")
+    defer:
+      removeDir(dir)
+    let cachePath = dir / "scan-cache.kdl"
+    let pluginPath = dir / "plugin.clap"
+    writeFile(pluginPath, "plugin")
+    let mtime = pluginMtime(pluginPath)
+    var cache = scanDescriptorToKdlDoc(exampleDescriptor(pluginPath), mtime - 1)
+    check saveScanCache(cachePath, cache)
+
+    let helperPath = dir / "scan-helper"
+    writeScanHelper(
+      helperPath, scanDescriptorToKdl(exampleDescriptor(pluginPath), mtime)
+    )
+
+    let result = scanPluginWithCache(helperPath, pluginPath, cachePath, 1000)
+    check result.ok
+
+    let loaded = loadScanCache(cachePath)
+    check loaded.findCachedScanNode(pluginPath, mtime).isSome
+    check loaded.findCachedScanNode(pluginPath, mtime - 1).isNone
+
+  test "scan cache upsert replaces older entries for the same path":
+    let oldNode = scanDescriptorToKdlDoc(exampleDescriptor("/tmp/example.clap"), 1)[0]
+    let newNode = scanDescriptorToKdlDoc(exampleDescriptor("/tmp/example.clap"), 2)[0]
+    let otherNode = scanDescriptorToKdlDoc(exampleDescriptor("/tmp/other.clap"), 1)[0]
+    var cache: KdlDoc = @[oldNode, otherNode]
+
+    cache.upsertScanCacheNode(newNode)
+
+    check cache.len == 2
+    check cache.findCachedScanNode("/tmp/example.clap", 1).isNone
+    check cache.findCachedScanNode("/tmp/example.clap", 2).isSome
+    check cache.findCachedScanNode("/tmp/other.clap", 1).isSome
+
+  test "malformed scan cache falls back to helper":
+    let dir = scanTestDir("malformed")
+    defer:
+      removeDir(dir)
+    let cachePath = dir / "scan-cache.kdl"
+    let pluginPath = dir / "plugin.clap"
+    writeFile(pluginPath, "plugin")
+    writeFile(cachePath, "plugin-scan {")
+    let mtime = pluginMtime(pluginPath)
+    let helperPath = dir / "scan-helper"
+    writeScanHelper(
+      helperPath, scanDescriptorToKdl(exampleDescriptor(pluginPath), mtime)
+    )
+
+    let result = scanPluginWithCache(helperPath, pluginPath, cachePath, 1000)
+    check result.ok
+    check loadScanCache(cachePath).findCachedScanNode(pluginPath, mtime).isSome
 
   test "scanner process runner accepts valid KDL output":
     let printfExe = findExe("printf")
