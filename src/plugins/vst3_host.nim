@@ -4,8 +4,8 @@ import ../platform/wayland_app
 const
   DefaultNilampBundle* = "/home/niltempus/dev/nilamp/native/bin/nilamp-twd-mkii.vst3"
   DefaultVst3UiShim* = "build/libnilrack_vst3_ui_shim.so"
-  DefaultEditorWidth* = 640'i32
-  DefaultEditorHeight* = 360'i32
+  DefaultEditorWidth* = 750'i32
+  DefaultEditorHeight* = 510'i32
 
 type
   NilrackWaylandHandles {.bycopy.} = object

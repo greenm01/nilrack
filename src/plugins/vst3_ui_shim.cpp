@@ -8,12 +8,14 @@
 #include "public.sdk/source/main/pluginfactory.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <dlfcn.h>
 #include <poll.h>
 #include <string>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 #include <wayland-client.h>
@@ -152,7 +154,8 @@ static void onSurfaceCreated(void *userdata, wayembed_client *client, wl_surface
 static void onEmbedMapped(void *userdata, wayembed_embed *embed)
 {
     if (embed && wayembed_embed_id(embed) != 0) {
-        static_cast<nilrack_vst3_ui *>(userdata)->mapped++;
+        auto *ui = static_cast<nilrack_vst3_ui *>(userdata);
+        ui->mapped++;
     }
 }
 
@@ -166,6 +169,13 @@ static void onEmbedResized(void *userdata, wayembed_embed *embed, int32_t width,
 class HostApp final : public IHostApplication, public IWaylandHost, public Linux::IRunLoop {
 public:
     explicit HostApp(wayembed_server *serverIn) : server(serverIn) {}
+    ~HostApp()
+    {
+        if (timerHandler) {
+            timerHandler->release();
+            timerHandler = nullptr;
+        }
+    }
 
     wl_display *prepareWaylandConnection()
     {
@@ -258,20 +268,40 @@ public:
         return kResultTrue;
     }
 
-    tresult PLUGIN_API registerTimer(Linux::ITimerHandler *, Linux::TimerInterval) SMTG_OVERRIDE
+    tresult PLUGIN_API registerTimer(Linux::ITimerHandler *handler, Linux::TimerInterval) SMTG_OVERRIDE
     {
+        if (!handler) {
+            return kInvalidArgument;
+        }
+        if (timerHandler) {
+            timerHandler->release();
+        }
+        timerHandler = handler;
+        timerHandler->addRef();
         return kResultTrue;
     }
 
-    tresult PLUGIN_API unregisterTimer(Linux::ITimerHandler *) SMTG_OVERRIDE
+    tresult PLUGIN_API unregisterTimer(Linux::ITimerHandler *handler) SMTG_OVERRIDE
     {
+        if (timerHandler && (!handler || timerHandler == handler)) {
+            timerHandler->release();
+            timerHandler = nullptr;
+        }
         return kResultTrue;
+    }
+
+    void fireTimers()
+    {
+        if (timerHandler) {
+            timerHandler->onTimer();
+        }
     }
 
 private:
     wayembed_server *server = nullptr;
     wl_display *preparedDisplay = nullptr;
     std::vector<wl_display *> activeDisplays;
+    Linux::ITimerHandler *timerHandler = nullptr;
     uint32 refs = 1;
 };
 
@@ -363,7 +393,55 @@ static int32_t pumpOnce(nilrack_vst3_ui *ui, int timeoutMs)
     } else if (ui->pluginDisplay) {
         wl_display_dispatch_pending(ui->pluginDisplay);
     }
+    if (ui->hostApp) {
+        ui->hostApp->fireTimers();
+    }
     wayembed_server_flush(ui->server);
+    return 0;
+}
+
+static void pumpServerOnly(nilrack_vst3_ui *ui, const std::atomic<bool> *stop)
+{
+    if (!ui || !ui->server || !stop) {
+        return;
+    }
+    while (!stop->load(std::memory_order_relaxed)) {
+        wayembed_server_dispatch(ui->server);
+        wayembed_server_flush(ui->server);
+        if (hostDisplay(ui)) {
+            wl_display_flush(hostDisplay(ui));
+        }
+
+        pollfd fd = {wayembed_server_get_fd(ui->server), POLLIN, 0};
+        if (poll(&fd, 1, 2) > 0 && (fd.revents & POLLIN)) {
+            wayembed_server_dispatch(ui->server);
+        }
+    }
+    wayembed_server_dispatch(ui->server);
+    wayembed_server_flush(ui->server);
+}
+
+static int32_t pumpClientOnly(nilrack_vst3_ui *ui, int timeoutMs)
+{
+    if (!ui || !ui->pluginDisplay) {
+        return 1;
+    }
+    wl_display_flush(ui->pluginDisplay);
+    wl_display_dispatch_pending(ui->pluginDisplay);
+
+    pollfd fd = {wl_display_get_fd(ui->pluginDisplay), POLLIN, 0};
+    const int result = poll(&fd, 1, timeoutMs);
+    if (result < 0) {
+        return 2;
+    }
+    if (fd.revents & POLLIN) {
+        if (wl_display_dispatch(ui->pluginDisplay) < 0) {
+            return 3;
+        }
+    }
+    if (ui->hostApp) {
+        ui->hostApp->fireTimers();
+    }
     return 0;
 }
 
@@ -383,14 +461,14 @@ static bool waitForAdoptedSubsurface(nilrack_vst3_ui *ui, int timeoutMs)
 {
     int remaining = timeoutMs;
     while (remaining > 0 && !ui->embed) {
-        if (pumpOnce(ui, 20) != 0) {
+        if (pumpClientOnly(ui, 20) != 0) {
             return false;
         }
         remaining -= 20;
         if (ui->client && ui->child) {
             const uint32_t status = tryAdoptSubsurface(ui);
             if (status == WAYEMBED_EMBED_STATUS_OK) {
-                pumpOnce(ui, 20);
+                pumpClientOnly(ui, 20);
                 return true;
             }
             if (status != WAYEMBED_EMBED_STATUS_UNKNOWN_SURFACE) {
@@ -578,10 +656,21 @@ extern "C" int32_t nilrack_vst3_ui_create(const char *bundle_path,
         return 10;
     }
 
+    ViewRect preferredRect(0, 0, width, height);
+    if (ui->view->getSize(&preferredRect) == kResultOk &&
+        preferredRect.getWidth() > 0 && preferredRect.getHeight() > 0) {
+        width = preferredRect.getWidth();
+        height = preferredRect.getHeight();
+    }
+
     ui->frame = new PlugFrame(hostParentSurface(ui), ui->parentProxy);
     ViewRect rect(0, 0, width, height);
+    std::atomic<bool> stopAttachPump{false};
+    std::thread attachPump(pumpServerOnly, ui, &stopAttachPump);
     if (ui->view->setFrame(ui->frame) != kResultOk || ui->view->onSize(&rect) != kResultOk ||
         ui->view->attached(ui->parentProxy, kPlatformTypeWaylandSurfaceID) != kResultOk) {
+        stopAttachPump.store(true, std::memory_order_relaxed);
+        attachPump.join();
         logError("nilamp WaylandSurfaceID attach failed");
         cleanup(ui);
         delete ui;
@@ -589,23 +678,31 @@ extern "C" int32_t nilrack_vst3_ui_create(const char *bundle_path,
     }
 
     if (!waitForAdoptedSubsurface(ui, 1000) || !ui->embed || ui->mapped < 1) {
+        stopAttachPump.store(true, std::memory_order_relaxed);
+        attachPump.join();
         logError("wayembed subsurface adoption failed");
         cleanup(ui);
         delete ui;
         return 12;
     }
     if (wayembed_embed_resize(ui->embed, width, height) != WAYEMBED_EMBED_STATUS_OK) {
+        stopAttachPump.store(true, std::memory_order_relaxed);
+        attachPump.join();
         logError("initial embed resize failed");
         cleanup(ui);
         delete ui;
         return 13;
     }
+    stopAttachPump.store(true, std::memory_order_relaxed);
+    attachPump.join();
 
     std::fprintf(stderr,
-                 "nilrack-vst3-ui: mapped nilamp editor connected=%d surfaces=%d mapped=%d\n",
+                 "nilrack-vst3-ui: mapped nilamp editor connected=%d surfaces=%d mapped=%d size=%dx%d\n",
                  ui->connected,
                  ui->surfaceCreated,
-                 ui->mapped);
+                 ui->mapped,
+                 width,
+                 height);
     *out_ui = ui;
     return 0;
 }
