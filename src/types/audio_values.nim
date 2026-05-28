@@ -4,6 +4,7 @@ import core
 const
   MaxProcessPlanNodes* = 64
   MaxProcessPlanEntries* = 64
+  MaxRetiredProcessPlans* = 64
 
 type
   AudioIoMode* = enum
@@ -34,6 +35,15 @@ type
     current*: Atomic[pointer]
     callbackEpoch*: Atomic[uint64]
 
+  RetiredProcessPlan* = object
+    plan*: ptr ProcessPlan
+    safeAfterEpoch*: uint64
+
+  ProcessPlanRetireQueue* = object
+    count*: uint32
+    entries*: array[MaxRetiredProcessPlans, RetiredProcessPlan]
+    overflowed*: bool
+
   JackClientHandle* = distinct pointer
   JackPortHandle* = distinct pointer
 
@@ -54,40 +64,3 @@ type
     data*: array[N, T]
     head*: Atomic[int]
     tail*: Atomic[int]
-
-proc addPlanNode*(plan: var ProcessPlan, nodeId: NodeId): bool =
-  if plan.nodeCount >= MaxProcessPlanNodes.uint32:
-    plan.capacityExceeded = true
-    return false
-  plan.nodes[plan.nodeCount.int] = nodeId
-  inc plan.nodeCount
-  true
-
-proc addProcessEntry*(plan: var ProcessPlan, entry: AudioProcessEntry): bool =
-  if plan.entryCount >= MaxProcessPlanEntries.uint32:
-    plan.capacityExceeded = true
-    return false
-  plan.entries[plan.entryCount.int] = entry
-  inc plan.entryCount
-  true
-
-proc initProcessPlanSlot*(slot: var ProcessPlanSlot) =
-  slot.current.store(nil, moRelaxed)
-  slot.callbackEpoch.store(0'u64, moRelaxed)
-
-proc loadProcessPlan*(slot: var ProcessPlanSlot): ptr ProcessPlan =
-  cast[ptr ProcessPlan](slot.current.load(moAcquire))
-
-proc publishProcessPlan*(
-    slot: var ProcessPlanSlot, plan: ptr ProcessPlan
-): ptr ProcessPlan =
-  cast[ptr ProcessPlan](slot.current.exchange(cast[pointer](plan), moAcquireRelease))
-
-proc clearProcessPlan*(slot: var ProcessPlanSlot): ptr ProcessPlan =
-  slot.publishProcessPlan(nil)
-
-proc advanceCallbackEpoch*(slot: var ProcessPlanSlot): uint64 =
-  slot.callbackEpoch.fetchAdd(1'u64, moRelease) + 1'u64
-
-proc loadCallbackEpoch*(slot: var ProcessPlanSlot): uint64 =
-  slot.callbackEpoch.load(moAcquire)

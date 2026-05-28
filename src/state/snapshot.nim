@@ -1,5 +1,6 @@
 import std/tables
 import ../types/[core, audio_values]
+import ../systems/graph_process_plan
 import model
 
 proc compileProcessPlan*(m: NilrackModel): ProcessPlan =

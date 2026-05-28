@@ -2,6 +2,7 @@
 
 import ../types/audio_values
 import process_callback
+import process_plan_store
 
 const jackH = "jack/jack.h"
 const jackLib = "libjack.so.0"

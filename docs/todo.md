@@ -69,7 +69,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
 - [x] Replace `ProcessPlan.nodeOrder` `seq` and magic entry bound with named
   bounded storage constants
 - [x] Plan publication API: pointer-sized current-plan swap, no callback locks
-- [ ] Retire queue: callback epoch, `safeAfterEpoch`, UI-frame drain,
+- [x] Retire queue: callback epoch, `safeAfterEpoch`, UI-frame drain,
   stopped-backend immediate drain
 - [ ] `ProcessPlan` target lookup: live plugin/param/port validation for
   stale UI-to-audio events

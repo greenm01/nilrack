@@ -1,6 +1,22 @@
 import ../plugins/clap_host
 import ../types/[audio_values, core, model, plugin_values]
 
+proc addPlanNode*(plan: var ProcessPlan, nodeId: NodeId): bool =
+  if plan.nodeCount >= MaxProcessPlanNodes.uint32:
+    plan.capacityExceeded = true
+    return false
+  plan.nodes[plan.nodeCount.int] = nodeId
+  inc plan.nodeCount
+  true
+
+proc addProcessEntry*(plan: var ProcessPlan, entry: AudioProcessEntry): bool =
+  if plan.entryCount >= MaxProcessPlanEntries.uint32:
+    plan.capacityExceeded = true
+    return false
+  plan.entries[plan.entryCount.int] = entry
+  inc plan.entryCount
+  true
+
 proc mainAudioPort(
     descriptor: PluginDescriptor, direction: PortDirection
 ): PluginPortDescriptor =
