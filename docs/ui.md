@@ -34,6 +34,8 @@ Janet dispatches `Msg` values into the update loop. IPC does the same over a
 Unix socket. The command API is the `Msg` type — there is no separate scripting
 API. See [janet.md](janet.md).
 
+Thread ownership is summarized in [threads.md](threads.md).
+
 ## Draw List
 
 `NilDrawList` is the stable rendering model. The UI layer never calls
@@ -112,6 +114,21 @@ target. The target resolves to a `Msg`. The `Msg` enters `update`.
 
 Keyboard events route through the focus model. The focused `InputTargetId`
 receives key messages. Janet-registered hotkeys intercept before focus routing.
+
+## Future Undo
+
+Undo is deferred for v1, but the update path must not block it later.
+
+- Record committed user actions, not raw pointer motion or repeat input.
+- Every committed action should be a plain-data `Msg` variant that can be
+  serialized or replayed.
+- Model mutations flow through one update/entity-operation chokepoint that can
+  append an action-log entry before applying the mutation.
+- Runtime-only snapshots, audio meters, and scanner progress do not become undo
+  actions unless they commit a user-visible model change.
+
+V1 does not ship undo storage or undo UI. The action log is a foundation hook so
+undo can be added without replacing the update architecture.
 
 ## Visual References
 

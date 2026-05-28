@@ -4,6 +4,8 @@ The session model stores everything needed to restore a rack: graph topology,
 plugin references, parameter values, connections, MIDI mappings, UI layout, and
 plugin state blobs.
 
+Thread ownership for session jobs is summarized in [threads.md](threads.md).
+
 ## What Gets Saved
 
 - rack graph structure (nodes, cables, port connections)
@@ -27,6 +29,19 @@ Default policy: inline blobs smaller than 4 KiB; store larger blobs as sidecar
 files referenced from KDL. A future zipped session bundle can keep the same
 logical references while packaging sidecars with the main document.
 
+All persistent files use the same write pattern:
+
+```text
+write temp file
+fsync temp file
+rename over target
+fsync containing directory where available
+```
+
+Sidecars are written and synced before the main KDL. On session save, nilrack
+computes the referenced sidecar set and removes unreferenced sidecars in the
+session directory.
+
 See [stack.md](stack.md) for the `nimkdl` dependency.
 
 ## Plugin State
@@ -36,30 +51,24 @@ never reads or writes `StateBlobRef`.
 
 Save flow:
 
-1. The UI thread asks the adapter to save plugin state.
+1. The UI thread schedules a state-save job.
 2. The adapter returns an opaque blob or an error.
 3. The session system stores a small inline blob or writes a sidecar file.
 4. `NilrackModel` records the resulting `StateBlobRef`.
+
+State save runs off the realtime thread. It should also run off the UI thread
+when the adapter call may block. In-process v1 cannot safely kill a hung plugin
+state call. A timeout marks the job `SaveTimeout`, quarantines that runtime for
+future user action, and keeps the UI responsive; a future out-of-process bridge
+can terminate its helper process.
 
 If a native plugin UI changes hidden plugin state, the adapter marks state
 dirty through feedback. The UI thread pulls a fresh state blob later. The
 callback only sets a fixed flag.
 
-Restore flow:
-
-1. Instantiate the runtime while stopped.
-2. Load the opaque plugin blob through the adapter.
-3. Apply explicit nilrack parameter values for tracked params.
-4. Activate the runtime and compile a plan.
-
-The blob comes first because it may restore hidden format state. Explicit
-nilrack param records come after it because they are the visible session truth
-for tracked params.
-
-If loading a state blob changes ports, params, buses, or latency, the adapter
-reports a topology-change request. The UI thread re-queries the runtime, updates
-`NilrackModel`, recompiles the graph, and publishes a matching plan before the
-runtime processes audio.
+Restore order is defined in [plugin-lifecycle.md](plugin-lifecycle.md). The
+short rule is: load opaque plugin state first, re-query any topology changed by
+that state, then apply explicit nilrack parameter values for tracked params.
 
 ## Plugin Scan Cache
 

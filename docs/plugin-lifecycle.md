@@ -36,6 +36,8 @@ destroyed
 identity, params, ports, UI state, and state blobs. Runtime state lives in a
 plugin runtime store outside the model.
 
+Thread and process ownership is summarized in [threads.md](threads.md).
+
 ## Plan Publication
 
 The UI thread builds new plans. The audio callback executes the current plan.
@@ -67,22 +69,31 @@ steps:
 2. Destroy the old plan and runtime only after the audio callback cannot still
    be using the previous plan.
 
-The exact mechanism can be an epoch counter, a small retire queue drained from
-the UI thread, or another wait-free scheme. The rule is fixed: destruction is
-never immediate when a runtime may have been visible to the callback.
+Retirement uses the callback epoch and a UI-thread retire queue.
 
 ```text
-old plan references plugin A
-        |
-        v
-publish new plan without plugin A
-        |
-        v
-retire old plan and plugin A after callback epoch advances
+audio callback:
+  plan = currentPlan.load(moAcquire)
+  execute plan
+  callbackEpoch.store(callbackEpoch + 1, moRelease)
+
+publish replacement plan:
+  old = currentPlan.exchange(newPlan, moAcqRel)
+  epoch = callbackEpoch.load(moAcquire)
+  retireQueue.push(old, safeAfterEpoch = epoch + 1)
+
+retire drain tick:
+  epoch = callbackEpoch.load(moAcquire)
+  destroy entries where epoch >= safeAfterEpoch
 ```
 
-For v1, stopping JACK before process exit is enough for final shutdown. Live
-plugin removal, graph rebuilds, and session reload need deferred retirement.
+`safeAfterEpoch` is assigned when the replacement plan is published, not when
+the old plan first became live. That guarantees at least one later callback
+epoch has passed before the old plan or runtime is destroyed.
+
+When JACK is deactivated or the audio thread has joined, retirement is
+immediate. The UI thread may drain the retire queue synchronously because no
+callback can still hold an old plan pointer.
 
 ## Thread Ownership
 
@@ -117,22 +128,24 @@ Session restore should use this order:
 1. Rebuild model records for racks, nodes, ports, params, and cables.
 2. Load and instantiate plugin runtimes.
 3. Apply plugin state blobs while the runtime is stopped.
-4. Apply explicit nilrack parameter values for tracked params.
-5. Activate runtimes for the current sample rate and block size.
-6. Compile and publish the first plan.
-7. Start audio processing.
+4. If blob restore changes descriptors, ports, params, buses, or latency, re-query
+   that runtime before continuing.
+5. Apply explicit nilrack parameter values for tracked params.
+6. Activate runtimes for the current sample rate and block size.
+7. Compile and publish the first matching plan.
+8. Start audio processing.
 
 Blob restore happens before explicit parameter restore. The opaque plugin state
 may contain hidden format state, but nilrack parameter records are the session's
 visible truth for tracked params.
 
+Session restore does not enqueue parameter events until the matching plan is
+live. Stale-target validation still protects against racing edits from other
+sources.
+
 If state restore fails, the runtime should report an adapter error and keep the
 model load failure visible to the UI. The callback should not participate in
 state restore.
-
-If state restore changes plugin ports, bus counts, or latency, the adapter must
-report that as a topology-change request. The runtime must not process with a
-layout that no longer matches the published plan.
 
 ## Topology Change Requests
 
@@ -146,8 +159,7 @@ fixed:
 1. The adapter marks the runtime as needing topology refresh and reports a
    feedback flag or effect to the UI thread.
 2. The current `ProcessPlan` stays in force until replacement. The affected node
-   processes with the old layout only if the adapter says that is safe;
-   otherwise it is bypassed or silenced by plan policy.
+   is muted when the new topology does not match the published plan.
 3. The UI thread re-queries descriptor, ports, params, latency, and state that
    changed.
 4. Operations update `NilrackModel`.
@@ -156,6 +168,10 @@ fixed:
 
 No plugin or adapter may mutate callback-visible bus counts, buffer arrays, or
 process structs outside plan publication.
+
+Pass-through is allowed only when the adapter explicitly reports that the
+topology change does not affect audio I/O layout. Processing with the old layout
+is not allowed as a default fallback.
 
 ## Error Handling
 

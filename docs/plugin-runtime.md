@@ -56,7 +56,8 @@ not store CLAP, LV2, or VST3 event structs as shared data.
 Runtime lifetime is covered by [plugin-lifecycle.md](plugin-lifecycle.md).
 The model-to-plan compile contract is covered by
 [graph-compile.md](graph-compile.md). The event vocabulary is covered by
-[plugin-events.md](plugin-events.md).
+[plugin-events.md](plugin-events.md). Thread ownership is summarized in
+[threads.md](threads.md).
 
 ```mermaid
 flowchart TD
@@ -123,6 +124,25 @@ Adapters map generic event slices to native process input:
 Do not introduce a shared CLAP-like event record. That would make LV2 and VST3
 fit CLAP instead of fitting nilrack.
 
+## IPC-Friendly Ops
+
+Live plugin hosting is in-process for v1, but `PluginRuntimeOps` must stay
+bridgeable. A future bridge runtime should be able to implement the same ops by
+talking to a helper process over shared memory and pipes.
+
+Constraints:
+
+- calls take fixed-layout records;
+- no Nim `seq`, closures, `ref` objects, or exceptions cross the ops boundary;
+- audio buffers pass as pointer, stride, channel count, and frame count;
+- state blobs pass as pointer and byte length with ownership stated per call;
+- strings pass as pointer and byte length with caller-owned storage;
+- failures return enum values and optional diagnostic codes, not thrown errors.
+
+Anything that would not survive crossing a pipe stays out of the shared runtime
+ops table. Format adapters may still keep native scratch and helper objects
+behind their opaque runtime pointer.
+
 ## Native UI And Heavy Messages
 
 The generic nilrack event queue is for fixed-size host events: parameter edits,
@@ -147,6 +167,29 @@ Large payload ownership must be explicit:
 
 This keeps the shared event path small while leaving room for format-specific
 native UI behavior.
+
+## Host Callbacks
+
+Plugin APIs can call back into the host from hostile threads. The adapter owns
+thread classification and hoists work to the right nilrack boundary.
+
+| Callback class | Possible caller | Realtime-safe work |
+| --- | --- | --- |
+| restart or process request | audio thread or plugin thread | set fixed feedback flag |
+| parameter touched or changed | audio thread, UI thread, or plugin thread | write bounded event record or flag |
+| host log | any thread | write bounded log token or drop |
+| POSIX fd register/unregister | plugin thread or UI thread | enqueue adapter event |
+| timer register/unregister | plugin thread or UI thread | enqueue adapter event |
+| state dirty notification | UI thread or plugin thread | set dirty flag |
+
+Callbacks that can fire from the audio thread are wait-free flag setters only.
+They cannot allocate, lock, format strings, or call model operations.
+
+Plugin-created threads are treated like realtime-hostile threads unless the
+plugin API gives a stricter guarantee. `host_log` from any thread goes through a
+bounded ring or counter; the UI thread formats messages later. CLAP POSIX fd and
+timer extensions run on the UI thread or a plugin-event thread named in
+[threads.md](threads.md). The audio callback never polls file descriptors.
 
 ## Carla Prior Art and the Data-Oriented Shift
 

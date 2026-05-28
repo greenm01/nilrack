@@ -7,6 +7,7 @@ and design principle. The domain docs below go deeper on each subsystem.
 
 - [architecture.md](architecture.md) — goals, process model, milestones, design principle
 - [dod.md](dod.md) — data model, storage, operations, systems, snapshots
+- [threads.md](threads.md) — thread and process ownership map
 - [ui.md](ui.md) — TEA main loop, draw list, rack graph editor, widget layer
 - [audio.md](audio.md) — audio engine, JACK backend, realtime rules, ProcessPlan
 - [audio-routing.md](audio-routing.md) — cables, buses, graph compile, realtime plan

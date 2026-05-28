@@ -23,6 +23,8 @@ Janet mutates the model by dispatching `Msg` values into the update loop. It
 uses the same command API as IPC and UI input. The draw list follows from model
 state — Janet does not touch it directly.
 
+Thread ownership is summarized in [threads.md](threads.md).
+
 ## Event → Command Pattern
 
 The pattern is the same as Triad. Nim fires events into the Janet runtime.
@@ -49,6 +51,11 @@ Janet is compiled in statically. Module loading is disabled. The runtime
 disables networking, process spawning, and arbitrary file I/O. A fuel limit
 caps execution time per eval to prevent runaway scripts from stalling the UI
 thread.
+
+Janet runs as a UI-thread guest. It gets a per-frame fuel budget named by a
+constant in code. Scripts may read snapshots and dispatch `Msg` commands, but
+they never receive a direct `var NilrackModel`, never call audio code, and never
+block the realtime thread.
 
 This follows the same approach as Triad's `src/janet/binding.c`. That file is
 the reference implementation for the binding layer.

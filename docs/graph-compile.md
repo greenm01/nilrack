@@ -37,14 +37,15 @@ The compiler should follow a fixed order:
 2. Validate cable endpoints, port direction, port kind, and channel policy.
 3. Reject feedback cycles for v1.
 4. Expand bus-level cables into channel edges.
-5. Sort nodes into process order.
-6. Read plugin latency reports and attach them to node records.
-7. Assign buffer slots for host I/O, plugin I/O, mixes, delay, and scratch
+5. Expand MIDI, note, and event cables into plan-level event edges.
+6. Sort nodes into process order.
+7. Read plugin latency reports and attach them to node records.
+8. Assign buffer slots for host I/O, plugin I/O, mixes, delay, and scratch
    space.
-8. Emit fixed ops: clear, copy, add, process, MIDI merge, bypass, mute, meter,
+9. Emit fixed ops: clear, copy, add, process, MIDI merge, bypass, mute, meter,
    and future delay once PDC exists.
-9. Build event target lookup tables for plugins, params, and ports.
-10. Return a complete plan or a compile error snapshot.
+10. Build event target lookup tables for plugins, params, and ports.
+11. Return a complete plan or a compile error snapshot.
 
 Partial plans should not be published. If compile fails, keep the previous plan
 running and report the compile error to the UI.
@@ -171,8 +172,10 @@ MIDI routing follows the same model as audio:
 
 - MIDI ports are bus-level `PortData`.
 - Cables connect MIDI outputs to MIDI inputs.
-- Compile emits bounded MIDI event-buffer routes.
+- Compile emits bounded MIDI event-buffer routes as plan-level event edges.
 - Multiple MIDI sources merge by sample offset.
+- Event edges preserve sample offsets; they are not expanded into audio
+  channel edges.
 - Overflow sets a plan or snapshot flag; the callback does not log.
 
 The event representation is defined in [plugin-events.md](plugin-events.md).
@@ -186,7 +189,7 @@ Compile errors are data, not callback behavior:
 - kind mismatch;
 - unsupported channel mismatch;
 - missing plugin runtime;
-- feedback cycle;
+- `CycleDetected`;
 - plan capacity exceeded.
 
 The UI can render these errors against nodes and cables. The audio callback

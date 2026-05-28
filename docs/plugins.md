@@ -5,7 +5,8 @@ graph does not know which format produced a node. Format-specific logic stays
 in adapter modules.
 
 See [dod.md](dod.md) for how plugins map to the data model. See
-[stack.md](stack.md) for the per-format dependency decisions.
+[stack.md](stack.md) for the per-format dependency decisions. Thread and
+process ownership is summarized in [threads.md](threads.md).
 
 ## Internal Plugin Model
 
@@ -81,11 +82,13 @@ plugin.
 
 Scan results cache to disk in KDL format (via `nimkdl`), keyed by plugin path
 and mtime. nilrack only re-runs the helper when a plugin's mtime changes.
-See [session.md](session.md) for the cache format.
+See [session.md](session.md) for the cache format and atomic write pattern.
 
-If the helper exits non-zero, crashes, or writes invalid output, nilrack records
-a failed scan entry for that path and mtime. Automatic catalog loading skips that
-entry until the file changes or the user explicitly requests a rescan.
+The helper has a hard timeout named by a configurable constant in code. On
+timeout, nilrack kills the helper and records `ScanFailed{reason: Timeout}`.
+Non-zero exit, empty output, and malformed KDL also record typed failure
+reasons. Automatic catalog loading skips a path and mtime that match a failed
+scan entry until the file changes or the user explicitly requests a rescan.
 
 UI capability is scan metadata. The descriptor records whether generated UI,
 native Wayland, XWayland bridge, or no native UI is available. Loaded plugin
@@ -111,6 +114,17 @@ XWayland plugin UIs go through an isolated bridge. The bridge makes existing
 LV2 and VST3 plugin editors usable when they only expose X11 handles. It lives
 behind a clear boundary. The native Wayland shell does not depend on X11 for
 its own windowing, input, or rendering.
+
+Bridge lifecycle:
+
+1. UI thread requests a native editor.
+2. nilrack starts one bridge process for that plugin UI.
+3. UI sends position, resize, focus, and input over a bounded pipe protocol.
+4. Bridge reports ready, closed, failed, or timed out.
+5. On bridge exit, timeout, malformed reply, or plugin editor close, nilrack
+   destroys the embed record and falls back to generated controls.
+
+The bridge never processes audio and never mutates `NilrackModel` directly.
 
 ### Generated Parameter UI
 

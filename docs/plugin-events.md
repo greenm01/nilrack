@@ -156,8 +156,16 @@ feedbackDropped
 ```
 
 Overflow policy is conservative: drop the newest event, set a flag, and keep
-audio running. Later policies can be per-event-type, but the callback still
-must not allocate.
+audio running. Diagnostics are counted in `AudioCallbackDiagnostics`; see
+[audio.md](audio.md).
+
+Gestures need one extra rule. If `PluginParamGestureBegin` was accepted and a
+later value or `PluginParamGestureEnd` for that gesture cannot be queued, nilrack
+drops the rest of that gesture window, sets `FeedbackDropped`, and emits a
+synthetic `PluginParamGestureEnd` on the next UI drain. The UI must never remain
+in a held gesture state because a realtime queue overflowed.
+
+Later policies can be per-event-type, but the callback still must not allocate.
 
 ## State Restore
 
@@ -165,4 +173,5 @@ Session restore may enqueue parameter values after plugin state load if the
 session stores both a state blob and visible param values. State blobs are
 adapter-owned. Parameter events are host-owned. The restore system decides the
 order outside the callback, and stale-target validation still applies after the
-new plan is published.
+new plan is published. The ordered restore state machine lives in
+[plugin-lifecycle.md](plugin-lifecycle.md).
