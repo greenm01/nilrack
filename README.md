@@ -2,7 +2,7 @@
 
 An experimental native Wayland plugin rack for live audio graphs.
 
-Light on the dependency stack; lean and mean.
+Data-orineted-desgn (DOD) approach.
 
 nilrack essentially means 'no-rack' 
 
