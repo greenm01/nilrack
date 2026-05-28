@@ -93,7 +93,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
   refresh, overflow, and state dirty
 
 **Plugin runtime boundary**
-- [ ] `PluginRuntimeOps` uses fixed-layout records only: no `seq`, closures,
+- [x] `PluginRuntimeOps` uses fixed-layout records only: no `seq`, closures,
   `ref` objects, or exceptions across the boundary
 - [ ] `ProcessContext` bus and event slices match the IPC-friendly shape in
   [plugin-runtime.md](plugin-runtime.md)
