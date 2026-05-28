@@ -139,7 +139,7 @@ CLAP workflow on top of that foundation.
 - [x] Parameter edits: generated controls update model and enqueue RT-safe
   `PluginParamValue` events
 - [x] One-plugin state save smoke: plugin → `StateBlobRef`
-- [ ] One-plugin state restore smoke: `StateBlobRef` → stopped plugin → params
+- [x] One-plugin state restore smoke: `StateBlobRef` → stopped plugin → params
   applied after blob
 
 ---

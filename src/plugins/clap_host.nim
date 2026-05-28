@@ -36,6 +36,11 @@ type
   ClapStateWriteContext = object
     data: seq[byte]
 
+  ClapStateReadContext = object
+    data: ptr UncheckedArray[byte]
+    len: int
+    offset: int
+
 proc cstr(value: cstring): string =
   if value.isNil:
     ""
@@ -101,6 +106,26 @@ proc clapStateWrite(
     int64(count)
   except CatchableError:
     -1
+
+proc clapStateRead(
+    stream: ptr ClapIStream, buffer: pointer, size: uint64
+): int64 {.cdecl, raises: [].} =
+  if stream.isNil or stream.ctx.isNil or buffer.isNil:
+    return -1
+  let ctx = cast[ptr ClapStateReadContext](stream.ctx)
+  if ctx.offset >= ctx.len:
+    return 0
+  let requested =
+    if size > uint64(high(int)):
+      high(int)
+    else:
+      size.int
+  let available = ctx.len - ctx.offset
+  let count = if requested < available: requested else: available
+  if count > 0:
+    copyMem(buffer, addr ctx.data[ctx.offset], count)
+    ctx.offset += count
+  int64(count)
 
 proc initProcessStorage(loaded: ClapLoadedPlugin) =
   loaded.inputBuffer = ClapAudioBuffer(
@@ -267,6 +292,17 @@ proc saveClapState*(loaded: ClapLoadedPlugin, stateRef: var StateBlobRef): bool 
 
   stateRef.data = ctx.data
   true
+
+proc loadClapState*(loaded: ClapLoadedPlugin, stateRef: StateBlobRef): bool =
+  let ext = loaded.stateExtension()
+  if ext.isNil or ext.load.isNil or loaded.processing:
+    return false
+
+  var ctx = ClapStateReadContext(len: stateRef.data.len)
+  if stateRef.data.len > 0:
+    ctx.data = cast[ptr UncheckedArray[byte]](unsafeAddr stateRef.data[0])
+  var stream = ClapIStream(ctx: addr ctx, read: clapStateRead)
+  ext.load(loaded.plugin, addr stream)
 
 proc activateClap*(
     loaded: ClapLoadedPlugin, sampleRate: float64, minFrames, maxFrames: uint32

@@ -36,3 +36,8 @@ proc pluginDetach*(m: var NilrackModel, id: PluginId) =
     m.nodeByPlugin.del(id)
     m.uiByPlugin.del(id)
   discard m.plugins.delete(id)
+
+proc pluginSetStateRef*(m: var NilrackModel, id: PluginId, stateRef: StateBlobRef) =
+  if not m.plugins.contains(id):
+    return
+  m.plugins.mEntity(id).stateRef = stateRef

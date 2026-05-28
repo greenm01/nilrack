@@ -1,8 +1,8 @@
-import std/[os, unittest]
+import std/[options, os, unittest]
 
 import ../src/plugins/clap_host
+import ../src/state/engine
 import ../src/types/audio_values
-import ../src/types/model
 
 proc localClapPath(): string =
   let envPath = getEnv("NILRACK_TEST_CLAP")
@@ -84,3 +84,36 @@ suite "CLAP host":
         var stateRef: StateBlobRef
         check loaded.plugin.saveClapState(stateRef)
         loaded.plugin.close()
+
+    test "restores state into a stopped plugin before applying model params":
+      let saved = loadClapPlugin(pluginPath)
+      check saved.ok
+      if saved.ok:
+        var stateRef: StateBlobRef
+        check saved.plugin.saveClapState(stateRef)
+        saved.plugin.close()
+
+        let restored = loadClapPlugin(pluginPath)
+        check restored.ok
+        if restored.ok:
+          check restored.plugin.loadClapState(stateRef)
+
+          var model = NilrackModel()
+          let rackId = model.rackCreate("Restore smoke")
+          let nodeId = model.nodeCreate(rackId, nkPlugin, "Plugin")
+          let pluginId = model.pluginAttachToNode(
+            nodeId,
+            paClap,
+            pluginPath,
+            restored.descriptor.uri,
+            restored.descriptor.name,
+            hasState = restored.descriptor.hasState,
+          )
+          let paramId = model.paramCreate(nodeId, "Gain", 0.0, 1.0, 0.25)
+
+          model.pluginSetStateRef(pluginId, stateRef)
+          model.paramSetNormalized(paramId, 0.75)
+
+          check model.plugins.entity(pluginId).get.stateRef.data == stateRef.data
+          check model.params.entity(paramId).get.currentVal == 0.75
+          restored.plugin.close()
