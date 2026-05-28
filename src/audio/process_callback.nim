@@ -1,1 +1,42 @@
-# stub
+import std/atomics
+import ../types/audio_values
+
+var meterLevels*: array[4, Atomic[float32]]
+
+# These are set by jack_backend.initJackBackend before activation.
+# The callback runs on the JACK audio thread — no allocation, no logging.
+var gBackendPtr*: ptr JackBackend = nil
+
+type JackPort {.importc: "jack_port_t", header: "jack/jack.h".} = object
+
+proc jackPortGetBuffer(
+  port: ptr JackPort, nframes: uint32
+): pointer {.importc: "jack_port_get_buffer", header: "jack/jack.h".}
+
+proc jackProcess*(nframes: uint32, arg: pointer): cint {.cdecl.} =
+  let b = cast[ptr JackBackend](arg)
+  let in1 = cast[ptr UncheckedArray[float32]](jackPortGetBuffer(
+    cast[ptr JackPort](b.inPort1), nframes
+  ))
+  let in2 = cast[ptr UncheckedArray[float32]](jackPortGetBuffer(
+    cast[ptr JackPort](b.inPort2), nframes
+  ))
+  let out1 = cast[ptr UncheckedArray[float32]](jackPortGetBuffer(
+    cast[ptr JackPort](b.outPort1), nframes
+  ))
+  let out2 = cast[ptr UncheckedArray[float32]](jackPortGetBuffer(
+    cast[ptr JackPort](b.outPort2), nframes
+  ))
+  copyMem(out1, in1, nframes.int * sizeof(float32))
+  copyMem(out2, in2, nframes.int * sizeof(float32))
+  var peak1, peak2 = 0.0'f32
+  for i in 0 ..< nframes.int:
+    let a1 = abs(in1[i])
+    let a2 = abs(in2[i])
+    if a1 > peak1:
+      peak1 = a1
+    if a2 > peak2:
+      peak2 = a2
+  meterLevels[0].store(peak1, moRelaxed)
+  meterLevels[1].store(peak2, moRelaxed)
+  0

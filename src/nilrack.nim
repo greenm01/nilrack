@@ -1,7 +1,10 @@
+import std/atomics
 import state/engine
 import platform/wayland_app
 import render/renderer
-import render/draw_list
+import audio/jack_backend
+import audio/process_callback
+import systems/render_projection
 
 when isMainModule:
   var app: WaylandApp
@@ -15,6 +18,10 @@ when isMainModule:
     app.width.uint32,
     app.height.uint32,
   )
+
+  var jack: JackBackend
+  initJackBackend(jack, "nilrack")
+  activateJack(jack)
 
   var model = NilrackModel()
   var frame: NilDrawList
@@ -31,8 +38,12 @@ when isMainModule:
           app.running = false
       else:
         discard
-    frame.clear()
+    let mIn = meterLevels[0].load(moRelaxed)
+    let mOut = meterLevels[1].load(moRelaxed)
+    frame.project(model, app.width.float32, app.height.float32, mIn, mOut)
     r.renderFrame(frame)
 
+  deactivateJack(jack)
+  shutdownJackBackend(jack)
   r.shutdownRenderer()
   shutdownWaylandApp(app)

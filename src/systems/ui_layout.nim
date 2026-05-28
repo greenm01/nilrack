@@ -1,1 +1,27 @@
-# stub
+import ../types/[core, render_values]
+import ../render/draw_list
+
+proc layoutShell*(
+    list: var NilDrawList, width, height: float32, meterIn: float32, meterOut: float32
+) =
+  let stripH = height * 0.08
+  let canvasH = height - stripH
+
+  list.addRect(0, 0, width, canvasH, Color(r: 0.10, g: 0.10, b: 0.10, a: 1.0))
+  list.addRect(0, canvasH, width, stripH, Color(r: 0.14, g: 0.14, b: 0.14, a: 1.0))
+
+  let meterW = 6.0'f32
+  let meterPad = 4.0'f32
+  let meterX1 = width - meterPad - meterW
+  let meterX2 = meterX1 - meterPad - meterW
+  let meterMaxH = stripH - 4.0'f32
+  let meterY = canvasH + 2.0'f32
+  let green = Color(r: 0.2, g: 0.7, b: 0.3, a: 1.0)
+
+  if meterIn > 0.001'f32:
+    let h = meterMaxH * meterIn
+    list.addRect(meterX2, meterY + meterMaxH - h, meterW, h, green)
+
+  if meterOut > 0.001'f32:
+    let h = meterMaxH * meterOut
+    list.addRect(meterX1, meterY + meterMaxH - h, meterW, h, green)

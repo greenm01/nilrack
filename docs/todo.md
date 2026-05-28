@@ -36,25 +36,25 @@ boundary. No plugins yet. See [architecture.md](architecture.md) milestone 1.
 - [ ] stb_truetype: glyph atlas build on startup, text run draw command
 
 **Audio**
-- [ ] JACK C bindings: client, ports, activate/deactivate, process callback
-- [ ] `src/audio/jack_backend.nim`: register ports, translate buffers
-- [ ] `src/audio/process_callback.nim`: read `ProcessPlan`, pass audio through
-- [ ] `src/audio/rt_queue.nim`: preallocated UI→audio command queue
-- [ ] `src/state/snapshot.nim`: real `compileProcessPlan` for audio passthrough
+- [x] JACK C bindings: client, ports, activate/deactivate, process callback
+- [x] `src/audio/jack_backend.nim`: register ports, translate buffers
+- [x] `src/audio/process_callback.nim`: passthrough + peak meter publish
+- [x] `src/audio/rt_queue.nim`: preallocated UI→audio command queue
+- [x] `src/types/audio_values.nim`: `JackBackend`, `MeterSnapshot`, `RtQueue` types
 
 **Main loop**
 - [x] TEA update loop in `src/nilrack.nim`: collect `Msg`, dispatch, handle close/Escape
-- [ ] `src/systems/ui_layout.nim`: rack shell layout (node area, status strip)
-- [ ] `src/systems/render_projection.nim`: model → `NilDrawList`
-- [ ] `src/systems/ui_hit_test.nim`: `inputTargetAt` hit testing
+- [x] `src/systems/ui_layout.nim`: rack shell layout (node area, status strip, meter bars)
+- [x] `src/systems/render_projection.nim`: model → `NilDrawList`
+- [x] `src/systems/ui_hit_test.nim`: `inputTargetAt` hit testing (stub)
 
 **Meters**
-- [ ] Lock-free meter snapshot path: audio thread writes, UI thread reads
-- [ ] Meter draw command in draw list
-- [ ] Meter display in status strip
+- [x] Lock-free meter snapshot path: audio thread writes, UI thread reads via `Atomic[float32]`
+- [x] Meter draw commands in draw list (`layoutShell`)
+- [ ] Meter display visible — blocked on rect draw pipeline in renderer
 
 **Exit**
-- [ ] Clean shutdown: deactivate JACK, destroy wgpu, close Wayland
+- [x] Clean shutdown: deactivate JACK → shutdown renderer → close Wayland
 
 ---
 
