@@ -106,7 +106,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
 - [x] Published `ProcessPlan` execution calls `PluginRuntimeOps.process` with a
   `ProcessContext`; remove the legacy `processBlock` shortcut without putting
   executable adapter logic in `types/`
-- [ ] Shared non-realtime state ops (`saveState`, `loadState`) live on the
+- [x] Shared non-realtime state ops (`saveState`, `loadState`) live on the
   runtime boundary and delegate to adapter modules
 
 **Update loop hooks**

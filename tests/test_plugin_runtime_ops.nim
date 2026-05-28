@@ -24,6 +24,23 @@ proc okProcess(
   discard context
   prsOk
 
+proc okSaveState(
+    runtime: pointer, writer: PluginRuntimeStateWriteProc, writerCtx: pointer
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
+  discard runtime
+  discard writerCtx
+  if writer.isNil:
+    discard
+  prsOk
+
+proc okLoadState(
+    runtime: pointer, data: pointer, byteCount: uint64
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
+  discard runtime
+  discard data
+  discard byteCount
+  prsOk
+
 proc okDestroy(runtime: pointer) {.nimcall, gcsafe, raises: [].} =
   discard runtime
 
@@ -35,6 +52,8 @@ suite "plugin runtime ops":
       startProcessing: okSimple,
       stopProcessing: okSimple,
       process: okProcess,
+      saveState: okSaveState,
+      loadState: okLoadState,
       destroy: okDestroy,
     )
     let runtime = PluginRuntimeRef(pluginId: PluginId(1), runtime: nil, ops: addr ops)
@@ -43,6 +62,8 @@ suite "plugin runtime ops":
     check runtime.pluginId == PluginId(1)
     check runtimeOps.activate(runtime.runtime, 48000.0, 1, 64) == prsOk
     check runtimeOps.process(runtime.runtime, nil) == prsOk
+    check runtimeOps.saveState(runtime.runtime, nil, nil) == prsOk
+    check runtimeOps.loadState(runtime.runtime, nil, 0) == prsOk
 
   test "process context uses pointer slices and counts":
     var paramEvents: array[2, PluginParamEvent]

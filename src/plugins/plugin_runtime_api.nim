@@ -20,6 +20,18 @@ type
     runtime: pointer, context: ptr ProcessContext
   ): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].}
 
+  PluginRuntimeStateWriteProc* = proc(
+    ctx: pointer, data: pointer, byteCount: uint64
+  ): bool {.nimcall, gcsafe, raises: [].}
+
+  PluginRuntimeSaveStateProc* = proc(
+    runtime: pointer, writer: PluginRuntimeStateWriteProc, writerCtx: pointer
+  ): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].}
+
+  PluginRuntimeLoadStateProc* = proc(
+    runtime: pointer, data: pointer, byteCount: uint64
+  ): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].}
+
   PluginRuntimeDestroyProc* = proc(runtime: pointer) {.nimcall, gcsafe, raises: [].}
 
   PluginRuntimeOps* = object
@@ -28,6 +40,8 @@ type
     startProcessing*: PluginRuntimeSimpleProc
     stopProcessing*: PluginRuntimeSimpleProc
     process*: PluginRuntimeProcessProc
+    saveState*: PluginRuntimeSaveStateProc
+    loadState*: PluginRuntimeLoadStateProc
     destroy*: PluginRuntimeDestroyProc
 
 proc pluginRuntimeRef*(

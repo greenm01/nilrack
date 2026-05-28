@@ -101,7 +101,8 @@ type
     process*: proc(plugin: ptr ClapPlugin, process: ptr ClapProcess): int32 {.
       cdecl, gcsafe, raises: []
     .}
-    getExtension*: proc(plugin: ptr ClapPlugin, id: cstring): pointer {.cdecl.}
+    getExtension*:
+      proc(plugin: ptr ClapPlugin, id: cstring): pointer {.cdecl, gcsafe, raises: [].}
     onMainThread*: proc(plugin: ptr ClapPlugin) {.cdecl.}
 
   ClapPluginFactory* {.bycopy.} = object
@@ -165,8 +166,12 @@ type
     ) {.cdecl.}
 
   ClapPluginState* {.bycopy.} = object
-    save*: proc(plugin: ptr ClapPlugin, stream: ptr ClapOStream): bool {.cdecl.}
-    load*: proc(plugin: ptr ClapPlugin, stream: ptr ClapIStream): bool {.cdecl.}
+    save*: proc(plugin: ptr ClapPlugin, stream: ptr ClapOStream): bool {.
+      cdecl, gcsafe, raises: []
+    .}
+    load*: proc(plugin: ptr ClapPlugin, stream: ptr ClapIStream): bool {.
+      cdecl, gcsafe, raises: []
+    .}
 
   ClapAudioBuffer* {.bycopy.} = object
     data32*: ptr ptr cfloat

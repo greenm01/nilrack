@@ -105,7 +105,7 @@ proc clapStateWrite(
     for index in 0 ..< count:
       ctx.data.add(source[index])
     int64(count)
-  except CatchableError:
+  except Exception:
     -1
 
 proc clapStateRead(
@@ -274,36 +274,48 @@ proc queryState(plugin: ptr ClapPlugin, descriptor: var PluginDescriptor) =
   descriptor.hasState =
     not cast[ptr ClapPluginState](plugin.getExtension(plugin, ClapExtState.cstring)).isNil
 
-proc stateExtension(loaded: ClapLoadedPlugin): ptr ClapPluginState =
+proc stateExtension(
+    loaded: ClapLoadedPlugin
+): ptr ClapPluginState {.gcsafe, raises: [].} =
   if loaded.isNil or loaded.plugin.isNil:
     return nil
   cast[ptr ClapPluginState](loaded.plugin.getExtension(
     loaded.plugin, ClapExtState.cstring
   ))
 
-proc saveClapState*(loaded: ClapLoadedPlugin, stateRef: var StateBlobRef): bool =
-  let ext = loaded.stateExtension()
-  if ext.isNil or ext.save.isNil:
+proc saveClapState*(
+    loaded: ClapLoadedPlugin, stateRef: var StateBlobRef
+): bool {.gcsafe, raises: [].} =
+  try:
+    let ext = loaded.stateExtension()
+    if ext.isNil or ext.save.isNil:
+      return false
+
+    var ctx: ClapStateWriteContext
+    var stream = ClapOStream(ctx: addr ctx, write: clapStateWrite)
+    if not ext.save(loaded.plugin, addr stream):
+      return false
+
+    stateRef.data = ctx.data
+    true
+  except Exception:
     return false
 
-  var ctx: ClapStateWriteContext
-  var stream = ClapOStream(ctx: addr ctx, write: clapStateWrite)
-  if not ext.save(loaded.plugin, addr stream):
-    return false
+proc loadClapState*(
+    loaded: ClapLoadedPlugin, stateRef: StateBlobRef
+): bool {.gcsafe, raises: [].} =
+  try:
+    let ext = loaded.stateExtension()
+    if ext.isNil or ext.load.isNil or loaded.processing:
+      return false
 
-  stateRef.data = ctx.data
-  true
-
-proc loadClapState*(loaded: ClapLoadedPlugin, stateRef: StateBlobRef): bool =
-  let ext = loaded.stateExtension()
-  if ext.isNil or ext.load.isNil or loaded.processing:
-    return false
-
-  var ctx = ClapStateReadContext(len: stateRef.data.len)
-  if stateRef.data.len > 0:
-    ctx.data = cast[ptr UncheckedArray[byte]](unsafeAddr stateRef.data[0])
-  var stream = ClapIStream(ctx: addr ctx, read: clapStateRead)
-  ext.load(loaded.plugin, addr stream)
+    var ctx = ClapStateReadContext(len: stateRef.data.len)
+    if stateRef.data.len > 0:
+      ctx.data = cast[ptr UncheckedArray[byte]](unsafeAddr stateRef.data[0])
+    var stream = ClapIStream(ctx: addr ctx, read: clapStateRead)
+    ext.load(loaded.plugin, addr stream)
+  except Exception:
+    false
 
 proc activateClap*(
     loaded: ClapLoadedPlugin, sampleRate: float64, minFrames, maxFrames: uint32
@@ -438,6 +450,44 @@ proc clapRuntimeProcess(
   else:
     prsFailed
 
+proc clapRuntimeSaveState(
+    runtime: pointer, writer: PluginRuntimeStateWriteProc, writerCtx: pointer
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
+  let loaded = cast[ClapLoadedPlugin](runtime)
+  if loaded.isNil or writer.isNil:
+    return prsFailed
+  try:
+    var stateRef: StateBlobRef
+    if not loaded.saveClapState(stateRef):
+      return prsFailed
+    if stateRef.data.len == 0:
+      if writer(writerCtx, nil, 0): prsOk else: prsFailed
+    elif writer(
+      writerCtx, cast[pointer](unsafeAddr stateRef.data[0]), stateRef.data.len.uint64
+    ):
+      prsOk
+    else:
+      prsFailed
+  except CatchableError:
+    prsFailed
+
+proc clapRuntimeLoadState(
+    runtime: pointer, data: pointer, byteCount: uint64
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
+  let loaded = cast[ClapLoadedPlugin](runtime)
+  if loaded.isNil or (data.isNil and byteCount > 0):
+    return prsFailed
+  try:
+    if byteCount > high(int).uint64:
+      return prsFailed
+    var stateRef: StateBlobRef
+    if byteCount > 0:
+      stateRef.data.setLen(byteCount.int)
+      copyMem(addr stateRef.data[0], data, byteCount.int)
+    if loaded.loadClapState(stateRef): prsOk else: prsFailed
+  except CatchableError:
+    prsFailed
+
 proc clapRuntimeDestroy(runtime: pointer) {.nimcall, gcsafe, raises: [].} =
   let loaded = cast[ClapLoadedPlugin](runtime)
   if loaded.isNil:
@@ -453,6 +503,8 @@ var clapRuntimeOps = PluginRuntimeOps(
   startProcessing: clapRuntimeStartProcessing,
   stopProcessing: clapRuntimeStopProcessing,
   process: clapRuntimeProcess,
+  saveState: clapRuntimeSaveState,
+  loadState: clapRuntimeLoadState,
   destroy: clapRuntimeDestroy,
 )
 

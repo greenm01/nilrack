@@ -1,7 +1,9 @@
 import std/[options, os, unittest]
 
 import ../src/plugins/clap_host
+import ../src/plugins/plugin_runtime_api
 import ../src/state/engine
+import ../src/systems/plugin_lifecycle
 import ../src/types/audio_values
 
 proc localClapPath(): string =
@@ -77,26 +79,36 @@ suite "CLAP host":
         loaded.plugin.close()
 
     test "saves plugin state to a state blob":
-      let loaded = loadClapPlugin(pluginPath)
+      var store: PluginRuntimeStore
+      let pluginId = PluginId(41)
+      let loaded = store.loadClapRuntime(pluginId, pluginPath)
       check loaded.ok
       if loaded.ok:
         check loaded.descriptor.hasState
         var stateRef: StateBlobRef
-        check loaded.plugin.saveClapState(stateRef)
-        loaded.plugin.close()
+        check store.savePluginRuntimeState(pluginId, stateRef) == prsOk
+        var retiredRuntime: PluginRuntimeRef
+        check store.retirePluginRuntime(pluginId, retiredRuntime)
+        retiredRuntime.destroyPluginRuntime()
 
     test "restores state into a stopped plugin before applying model params":
-      let saved = loadClapPlugin(pluginPath)
+      var saveStore: PluginRuntimeStore
+      let savedPluginId = PluginId(42)
+      let saved = saveStore.loadClapRuntime(savedPluginId, pluginPath)
       check saved.ok
       if saved.ok:
         var stateRef: StateBlobRef
-        check saved.plugin.saveClapState(stateRef)
-        saved.plugin.close()
+        check saveStore.savePluginRuntimeState(savedPluginId, stateRef) == prsOk
+        var savedRuntime: PluginRuntimeRef
+        check saveStore.retirePluginRuntime(savedPluginId, savedRuntime)
+        savedRuntime.destroyPluginRuntime()
 
-        let restored = loadClapPlugin(pluginPath)
+        var restoreStore: PluginRuntimeStore
+        let restoredPluginId = PluginId(43)
+        let restored = restoreStore.loadClapRuntime(restoredPluginId, pluginPath)
         check restored.ok
         if restored.ok:
-          check restored.plugin.loadClapState(stateRef)
+          check restoreStore.loadPluginRuntimeState(restoredPluginId, stateRef) == prsOk
 
           var model = NilrackModel()
           let rackId = model.rackCreate("Restore smoke")
@@ -116,4 +128,6 @@ suite "CLAP host":
 
           check model.plugins.entity(pluginId).get.stateRef.data == stateRef.data
           check model.params.entity(paramId).get.currentVal == 0.75
-          restored.plugin.close()
+          var restoredRuntime: PluginRuntimeRef
+          check restoreStore.retirePluginRuntime(restoredPluginId, restoredRuntime)
+          restoredRuntime.destroyPluginRuntime()
