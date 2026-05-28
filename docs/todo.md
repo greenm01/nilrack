@@ -135,7 +135,7 @@ CLAP workflow on top of that foundation.
 - [x] Plugin node in rack UI: bypass toggle
 - [x] Generated parameter controls: display-only slider rows
 - [ ] Generated parameter controls: editable knob and slider widgets
-- [ ] `src/systems/param_mapping.nim`: normalized param value → draw + input target
+- [x] `src/systems/param_mapping.nim`: normalized param value → draw + input target
 - [ ] Parameter edits: generated controls update model and enqueue RT-safe
   `PluginParamValue` events
 - [ ] One-plugin state save smoke: plugin → `StateBlobRef`

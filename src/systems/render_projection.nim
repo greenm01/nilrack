@@ -1,21 +1,11 @@
-import std/[math, options]
+import std/options
 
 import ../types/[core, render_values]
 import ../state/engine
 import ../render/draw_list
+import param_mapping
 import ui_hit_test
 import ui_layout
-
-proc clamp01(value: float64): float32 =
-  if value.isNaN:
-    return 0.0'f32
-  max(0.0, min(1.0, value)).float32
-
-proc paramNorm(param: ParamData): float32 =
-  let span = param.maxVal - param.minVal
-  if span <= 0.0:
-    return 0.0'f32
-  clamp01((param.currentVal - param.minVal) / span)
 
 proc shortText(value: string, maxChars: int): string =
   if value.len <= maxChars:
@@ -97,12 +87,15 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
           p.name
       list.addTextRun(x + 14.0'f32, rowY, shortText(label, 20), text)
       let sx = x + 170.0'f32
-      let sy = rowY + 3.0'f32
-      let sw = w - 190.0'f32
-      list.addRect(sx, sy, sw, 8.0'f32, sliderBg)
-      list.addRect(sx, sy, sw * paramNorm(p), 8.0'f32, sliderFill)
+      let slider = node.paramSliderRect(visibleParam)
+      list.addRect(slider.x, slider.y, slider.w, slider.h, sliderBg)
+      list.addRect(
+        slider.x, slider.y, slider.w * p.normalizedParamValue(), slider.h, sliderFill
+      )
       if p.displayText.len > 0:
-        list.addTextRun(sx, sy + 10.0'f32, shortText(p.displayText, 16), mutedText)
+        list.addTextRun(
+          sx, slider.y + slider.h + 2.0'f32, shortText(p.displayText, 16), mutedText
+        )
       inc visibleParam
 
 proc project*(
