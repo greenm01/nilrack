@@ -1,4 +1,8 @@
-import ../types/[audio_values, core, graph_values, model]
+import std/[options, tables]
+
+import ../state/[iterators, model, queries]
+import ../types/[audio_values, core, graph_values, plugin_runtime_values]
+import graph_process_plan
 
 proc initGraphCompileReport*(rackId: RackId): GraphCompileReport =
   result.rackId = rackId
@@ -56,3 +60,100 @@ proc setCompiledPlan*(report: var GraphCompileReport, plan: ProcessPlan) =
   report.plan = plan
   if plan.capacityExceeded:
     discard report.reportPlanCapacityExceeded(report.rackId)
+
+proc hasPluginRuntime(store: PluginRuntimeStore, pluginId: PluginId): bool =
+  for i in 0 ..< store.count.int:
+    let runtime = store.runtimes[i]
+    if runtime.pluginId == pluginId and not runtime.runtime.isNil and
+        not runtime.ops.isNil:
+      return true
+  false
+
+proc nodeIndex(nodes: openArray[NodeId], nodeId: NodeId): int =
+  for i, candidate in nodes:
+    if candidate == nodeId:
+      return i
+  -1
+
+proc compileRackGraph*(
+    m: NilrackModel, rackId: RackId, runtimes: PluginRuntimeStore
+): GraphCompileReport =
+  result = initGraphCompileReport(rackId)
+
+  var nodeIds: seq[NodeId]
+  for nodeId in m.nodesInRack(rackId):
+    nodeIds.add(nodeId)
+
+  var outgoing: Table[NodeId, seq[(NodeId, CableId)]]
+  var indegree: Table[NodeId, int]
+  for nodeId in nodeIds:
+    indegree[nodeId] = 0
+
+  for cableId in m.cablesInRack(rackId):
+    let cable = m.cableData(cableId)
+    if cable.isNone:
+      continue
+    let cableValue = cable.get
+    if cableValue.routePolicy != crAuto:
+      discard
+        result.reportUnsupportedRoutePolicy(rackId, cableId, cableValue.routePolicy)
+      continue
+
+    let srcPort = m.portData(cableValue.srcPort)
+    let dstPort = m.portData(cableValue.dstPort)
+    if srcPort.isNone or dstPort.isNone:
+      continue
+    let srcNode = srcPort.get.nodeId
+    let dstNode = dstPort.get.nodeId
+    if nodeIds.nodeIndex(srcNode) < 0 or nodeIds.nodeIndex(dstNode) < 0:
+      continue
+
+    outgoing.mgetOrPut(srcNode, @[]).add((dstNode, cableId))
+    indegree[dstNode] = indegree.getOrDefault(dstNode, 0) + 1
+
+  var ready: seq[NodeId]
+  for nodeId in nodeIds:
+    if indegree.getOrDefault(nodeId, 0) == 0:
+      ready.add(nodeId)
+
+  var ordered: seq[NodeId]
+  var readyIndex = 0
+  while readyIndex < ready.len:
+    let nodeId = ready[readyIndex]
+    inc readyIndex
+    ordered.add(nodeId)
+    for edge in outgoing.getOrDefault(nodeId, @[]):
+      let dstNode = edge[0]
+      indegree[dstNode] = indegree[dstNode] - 1
+      if indegree[dstNode] == 0:
+        ready.add(dstNode)
+
+  if ordered.len != nodeIds.len:
+    for cableId in m.cablesInRack(rackId):
+      let cable = m.cableData(cableId)
+      if cable.isNone:
+        continue
+      let dstPort = m.portData(cable.get.dstPort)
+      if dstPort.isSome and indegree.getOrDefault(dstPort.get.nodeId, 0) > 0:
+        discard result.reportCycleDetected(rackId, dstPort.get.nodeId, cableId)
+        break
+
+  var plan: ProcessPlan
+  for nodeId in ordered:
+    discard plan.addPlanNode(nodeId)
+    let pluginId = m.pluginForNode(nodeId)
+    if pluginId.isNone:
+      continue
+    if not runtimes.hasPluginRuntime(pluginId.get):
+      discard result.reportMissingRuntime(rackId, nodeId, pluginId.get)
+      continue
+    discard plan.addPluginTarget(pluginId.get)
+    for paramId in m.paramsForNode(nodeId):
+      discard plan.addParamTarget(pluginId.get, paramId)
+    for portId in m.portsForNode(nodeId):
+      let port = m.portData(portId)
+      if port.isSome and port.get.kind != pkAudio and port.get.direction == pdIn:
+        discard plan.addEventPortTarget(portId)
+
+  if not result.hasCompileErrors:
+    result.setCompiledPlan(plan)

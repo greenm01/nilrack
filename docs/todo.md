@@ -127,7 +127,7 @@ CLAP workflow on top of that foundation.
 - [x] `src/systems/graph_process_plan.nim`: single-plugin JACK process plan
 - [x] `src/systems/plugin_lifecycle.nim`: CLAP load, activate, deactivate,
   unload through the runtime store
-- [ ] `src/systems/graph_compile.nim`: one-rack, acyclic graph compile to a
+- [x] `src/systems/graph_compile.nim`: one-rack, acyclic graph compile to a
   published `ProcessPlan`
 - [ ] `src/systems/graph_process_plan.nim`: build process plan from compiled
   graph, not only the single-plugin helper
