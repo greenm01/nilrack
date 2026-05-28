@@ -2,9 +2,10 @@
 
 An experimental native Wayland plugin rack for live audio graphs.
 
-Data-orineted-desgn (DOD) approach.
+nilrack uses a data-oriented design (DOD): one model owns rack truth, while
+audio and rendering consume compiled snapshots.
 
-nilrack essentially means 'no-rack' 
+The name means "no rack".
 
 See [TODO](docs/todo.md) for project status.
 
