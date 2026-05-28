@@ -35,3 +35,26 @@ suite "plugin param event queue":
 
     let diagnostics = backend.diagnostics.loadAudioCallbackDiagnostics()
     check diagnostics.diagnosticCount(adkQueueFull) == 1
+
+  test "gesture begin overflow does not create active gesture state":
+    var backend: JackBackend
+    backend.diagnostics.initAudioCallbackDiagnostics()
+
+    for i in 0 ..< MaxPluginParamEvents - 1:
+      check backend.enqueuePluginParamValue(PluginId(1), ParamId(i.uint32 + 1), 0.5)
+
+    check not backend.enqueuePluginParamGestureBegin(PluginId(1), ParamId(9999))
+    check not backend.hasActivePluginParamGesture(PluginId(1), ParamId(9999))
+
+  test "gesture end overflow clears active gesture state":
+    var backend: JackBackend
+    backend.diagnostics.initAudioCallbackDiagnostics()
+
+    check backend.enqueuePluginParamGestureBegin(PluginId(1), ParamId(10))
+    check backend.hasActivePluginParamGesture(PluginId(1), ParamId(10))
+
+    for i in 0 ..< MaxPluginParamEvents - 2:
+      check backend.enqueuePluginParamValue(PluginId(1), ParamId(i.uint32 + 1), 0.5)
+
+    check not backend.enqueuePluginParamGestureEnd(PluginId(1), ParamId(10))
+    check not backend.hasActivePluginParamGesture(PluginId(1), ParamId(10))

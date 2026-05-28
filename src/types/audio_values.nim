@@ -9,6 +9,7 @@ const
   MaxProcessPlanEventPortTargets* = 128
   MaxRetiredProcessPlans* = 64
   MaxPluginParamEvents* = 256
+  MaxPluginParamGestures* = 64
 
 type
   AudioIoMode* = enum
@@ -101,6 +102,10 @@ type
     normalizedValue*: float64
     sampleOffset*: uint32
 
+  PluginParamGestureTracker* = object
+    count*: uint32
+    targets*: array[MaxPluginParamGestures, ProcessParamTarget]
+
   RtQueue*[T; N: static int] = object
     data*: array[N, T]
     head*: Atomic[int]
@@ -121,6 +126,7 @@ type
     diagnostics*: AudioCallbackDiagnostics
     reconfiguration*: AudioReconfigurationState
     paramEvents*: RtQueue[PluginParamEvent, MaxPluginParamEvents]
+    paramGestures*: PluginParamGestureTracker
 
   MeterSnapshot* = object
     levels*: array[4, float32]
