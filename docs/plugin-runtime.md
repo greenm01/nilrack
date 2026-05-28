@@ -16,23 +16,42 @@ state refs. `ProcessPlan` is a callback-safe snapshot built from that model.
 Loaded plugin instances sit behind opaque runtime pointers.
 
 ```text
-PluginRuntimeRef
-  runtime: pointer
-  ops: ptr PluginRuntimeOps
+PluginEventContext
+  paramValues: ptr UncheckedArray[PluginParamValue]
+  paramValueCount: uint32
+  midiEvents: ptr UncheckedArray[PluginMidiEvent]
+  midiEventCount: uint32
+  transport: ptr PluginTransportSnapshot
+
+PluginAudioBus
+  portId: PortId
+  channels: ptr UncheckedArray[pointer]
+  channelCount: uint32
+
+ProcessContext
+  frames: uint32
+  audioInputs: ptr UncheckedArray[PluginAudioBus]
+  audioInputBusCount: uint32
+  audioOutputs: ptr UncheckedArray[PluginAudioBus]
+  audioOutputBusCount: uint32
+  events: PluginEventContext
 
 PluginRuntimeOps
   activate
   deactivate
-  processBlock
-  applyParamEdits
+  process
   saveState
   loadState
   destroy
+
+PluginRuntimeRef
+  runtime: pointer
+  ops: ptr PluginRuntimeOps
 ```
 
 The exact Nim names can change, but the shape should not. The process plan
-stores runtime refs and buffer bindings. It does not store CLAP, LV2, or VST3
-event structs as shared data.
+stores runtime refs, bus layouts, event slices, and buffer bindings. It does
+not store CLAP, LV2, or VST3 event structs as shared data.
 
 Runtime lifetime is covered by [plugin-lifecycle.md](plugin-lifecycle.md).
 The model-to-plan compile contract is covered by
@@ -43,7 +62,7 @@ The model-to-plan compile contract is covered by
 flowchart TD
   UI[UI / Generated Controls]
   Model[NilrackModel<br/>PluginData, ParamData, PortData]
-  Queue[RT Queue<br/>PluginParamEdit]
+  Queue[RT Queue<br/>Plugin events]
   Plan[Compiled ProcessPlan]
   Audio[JACK Audio Callback]
 
@@ -67,7 +86,7 @@ flowchart TD
 
   Audio -->|read immutable plan| Plan
   Audio -->|drain edits| Queue
-  Audio -->|applyParamEdits + processBlock| Ops
+  Audio -->|process(ProcessContext)| Ops
 
   Ops --> Clap
   Ops --> Lv2
@@ -80,45 +99,58 @@ flowchart TD
 
 ## Parameter Edits
 
-Generated controls emit format-neutral edits:
+Generated controls emit format-neutral parameter events:
 
 ```text
-PluginParamEdit
+PluginParamValue
   pluginId
   paramId
   value
+  valueKind
   sampleOffset
 ```
 
 The UI updates `ParamData.currentVal` through normal model operations and
 pushes the edit into a preallocated queue. The audio callback drains that queue
-and hands edits to the runtime ops for the matching plugin.
+and constructs `ProcessContext` slices for each plugin.
 
-Adapters map the generic edit to their native process input:
+Adapters map generic event slices to native process input:
 
-- CLAP writes `clap_event_param_value`.
-- LV2 writes control ports or atom events.
-- VST3 writes process parameter queues.
+- CLAP writes preallocated `clap_event_param_value` records.
+- LV2 writes control ports or preallocated atom-event buffers.
+- VST3 writes preallocated process parameter queues.
 
 Do not introduce a shared CLAP-like event record. That would make LV2 and VST3
 fit CLAP instead of fitting nilrack.
 
-## Carla Prior Art
+## Carla Prior Art and the Data-Oriented Shift
 
 Carla's useful lesson is the host boundary. Its engine speaks to a common
 plugin base type. CLAP, LV2, and VST3 implementations translate inside their
-own subclasses. For example, a generic realtime parameter change enters
-Carla's shared plugin method, while the CLAP subclass turns it into CLAP input
-events before processing.
+own subclasses. For example, Carla uses a separate RT call `setParameterValueRT`
+that subclasses handle before the `process` call.
 
-nilrack should copy that division of responsibility, not Carla's C++ object
-model. In nilrack:
+While Carla's approach works for an OOP design, its separated RT parameter
+calls are not the shape nilrack should expose as the shared runtime boundary.
+CLAP, LV2, and VST3 each still need native process data with the right lifetime
+during `process`.
+
+nilrack diverges from Carla's separated event calls to prioritize a
+zero-allocation data flow. Instead of multiple functions, nilrack uses a unified
+`process` call taking a `ProcessContext`. The context is a per-process view
+into plan-owned audio buses and preallocated event slices. The adapter
+translates those slices into its own preallocated native scratch, such as CLAP
+event lists or VST3 `ProcessData`, during the process call. That keeps the
+callback allocation-free without pretending native plugin APIs need no scratch
+storage.
+
+In nilrack:
 
 - shared state lives in passive records and dense tables;
 - relationship truth is carried by typed IDs;
-- hot audio data crosses as `ProcessPlan`;
+- hot audio data and event slices cross via `ProcessContext`;
 - plugin behavior crosses through a small ops table;
-- format adapters own native handles, event storage, and API calls.
+- format adapters own native handles, API calls, and preallocated native scratch.
 
 ## Ownership Rules
 
