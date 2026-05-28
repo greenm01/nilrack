@@ -27,6 +27,23 @@ proc testProcess(
   discard context
   prsOk
 
+type CountingRuntime = object
+  calls: int
+
+proc copyPlusOneProcess(
+    runtime: pointer, context: ptr ProcessContext
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
+  let state = cast[ptr CountingRuntime](runtime)
+  inc state.calls
+  let inputBus = context.audioInputs[0]
+  let outputBus = context.audioOutputs[0]
+  for channel in 0'u32 ..< inputBus.channelCount:
+    let input = cast[ptr UncheckedArray[float32]](inputBus.channels[channel.int])
+    let output = cast[ptr UncheckedArray[float32]](outputBus.channels[channel.int])
+    for frame in 0 ..< context.frames.int:
+      output[frame] = input[frame] + 1.0'f32
+  prsOk
+
 suite "process plan audio":
   test "process plan nodes use bounded storage":
     var plan: ProcessPlan
@@ -52,6 +69,38 @@ suite "process plan audio":
     check not plan.addProcessEntry(AudioProcessEntry(nodeId: NodeId(999)))
     check plan.capacityExceeded
     check plan.entryCount == MaxProcessPlanEntries.uint32
+
+  test "process plan buffers and ops use bounded storage":
+    var plan: ProcessPlan
+    var index: uint32
+    check plan.addProcessBuffer(
+      ProcessBufferSlot(kind: pbkHostInput, channel: 0), index
+    )
+    check index == 0
+    check plan.addProcessBuffer(
+      ProcessBufferSlot(kind: pbkHostInput, channel: 0), index
+    )
+    check index == 0
+    check plan.bufferCount == 1
+
+    for i in 1 ..< MaxProcessPlanBuffers:
+      check plan.addProcessBuffer(
+        ProcessBufferSlot(kind: pbkHostInput, channel: i.uint32), index
+      )
+
+    check plan.bufferCount == MaxProcessPlanBuffers.uint32
+    check not plan.addProcessBuffer(
+      ProcessBufferSlot(kind: pbkHostOutput, channel: 99), index
+    )
+    check plan.capacityExceeded
+
+    var opPlan: ProcessPlan
+    for i in 0 ..< MaxProcessPlanOps:
+      check opPlan.addCopyOp(0, 1)
+
+    check opPlan.opCount == MaxProcessPlanOps.uint32
+    check not opPlan.addCopyOp(0, 1)
+    check opPlan.capacityExceeded
 
   test "process plan target lookup uses bounded storage":
     var plan: ProcessPlan
@@ -155,6 +204,9 @@ suite "process plan audio":
     check plan.entries[0].ops == cast[pointer](addr ops)
     check plan.entries[0].ioMode == aimMonoLeftToStereo
     check plan.entries[0].active
+    check plan.opCount == 1
+    check plan.ops[0].kind == pokProcess
+    check plan.ops[0].entryIndex == 0
 
   test "compiled graph process entries respect host bypass":
     var model = NilrackModel()
@@ -182,6 +234,112 @@ suite "process plan audio":
 
     check plan.entryCount == 1
     check not plan.entries[0].active
+
+  test "copy op routes host input to host output":
+    var plan: ProcessPlan
+    var inputIndex: uint32
+    var outputIndex: uint32
+    check plan.addProcessBuffer(
+      ProcessBufferSlot(kind: pbkHostInput, channel: 0), inputIndex
+    )
+    check plan.addProcessBuffer(
+      ProcessBufferSlot(kind: pbkHostOutput, channel: 0), outputIndex
+    )
+    check plan.addCopyOp(inputIndex, outputIndex)
+
+    var input1: array[4, float32]
+    var input2: array[4, float32]
+    var output1: array[4, float32]
+    var output2: array[4, float32]
+    for i in 0 .. input1.high:
+      input1[i] = (i + 2).float32
+      input2[i] = -10.0'f32
+
+    check processAudioBlock(
+      addr plan, addr input1[0], addr input2[0], addr output1[0], addr output2[0], 4
+    )
+    check output1 == input1
+    check output2 == default(array[4, float32])
+
+  test "add op sums into host output":
+    var plan: ProcessPlan
+    var inputIndex: uint32
+    var outputIndex: uint32
+    check plan.addProcessBuffer(
+      ProcessBufferSlot(kind: pbkHostInput, channel: 0), inputIndex
+    )
+    check plan.addProcessBuffer(
+      ProcessBufferSlot(kind: pbkHostOutput, channel: 0), outputIndex
+    )
+    check plan.addCopyOp(inputIndex, outputIndex)
+    check plan.addAddOp(inputIndex, outputIndex)
+
+    var input1: array[4, float32]
+    var input2: array[4, float32]
+    var output1: array[4, float32]
+    var output2: array[4, float32]
+    for i in 0 .. input1.high:
+      input1[i] = (i + 1).float32
+
+    check processAudioBlock(
+      addr plan, addr input1[0], addr input2[0], addr output1[0], addr output2[0], 4
+    )
+    for i in 0 .. output1.high:
+      check output1[i] == input1[i] * 2.0'f32
+    check output2 == default(array[4, float32])
+
+  test "process op uses the selected entry":
+    var state: CountingRuntime
+    var ops = PluginRuntimeOps(process: copyPlusOneProcess)
+    var plan: ProcessPlan
+    check plan.addProcessEntry(
+      AudioProcessEntry(
+        nodeId: NodeId(1),
+        pluginId: PluginId(1),
+        runtime: nil,
+        ops: nil,
+        ioMode: aimMonoLeftToStereo,
+        active: true,
+      )
+    )
+    check plan.addProcessEntry(
+      AudioProcessEntry(
+        nodeId: NodeId(2),
+        pluginId: PluginId(2),
+        runtime: addr state,
+        ops: cast[pointer](addr ops),
+        ioMode: aimMonoLeftToStereo,
+        active: true,
+      )
+    )
+    var inputIndex: uint32
+    var outputIndex: uint32
+    var outputRightIndex: uint32
+    check plan.addProcessBuffer(
+      ProcessBufferSlot(kind: pbkHostInput, channel: 0), inputIndex
+    )
+    check plan.addProcessBuffer(
+      ProcessBufferSlot(kind: pbkHostOutput, channel: 0), outputIndex
+    )
+    check plan.addProcessBuffer(
+      ProcessBufferSlot(kind: pbkHostOutput, channel: 1), outputRightIndex
+    )
+    check plan.addProcessOp(1, inputIndex, outputIndex, 1, inputIndex, outputRightIndex)
+
+    var input1: array[4, float32]
+    var input2: array[4, float32]
+    var output1: array[4, float32]
+    var output2: array[4, float32]
+    for i in 0 .. input1.high:
+      input1[i] = i.float32
+
+    check processAudioBlock(
+      addr plan, addr input1[0], addr input2[0], addr output1[0], addr output2[0], 4
+    )
+    check state.calls == 1
+    for i in 0 .. output1.high:
+      check output1[i] == input1[i] + 1.0'f32
+      check output2[i] == output1[i]
 
   test "falls back to passthrough without a plan":
     var input1: array[8, float32]

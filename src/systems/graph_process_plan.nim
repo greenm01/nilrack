@@ -41,6 +41,66 @@ proc addProcessEntry*(plan: var ProcessPlan, entry: AudioProcessEntry): bool =
   discard plan.addPluginTarget(entry.pluginId)
   true
 
+proc addProcessBuffer*(
+    plan: var ProcessPlan, slot: ProcessBufferSlot, index: var uint32
+): bool =
+  for i in 0 ..< plan.bufferCount.int:
+    if plan.buffers[i] == slot:
+      index = i.uint32
+      return true
+  if plan.bufferCount >= MaxProcessPlanBuffers.uint32:
+    plan.capacityExceeded = true
+    return false
+  index = plan.bufferCount
+  plan.buffers[plan.bufferCount.int] = slot
+  inc plan.bufferCount
+  true
+
+proc addProcessOp*(plan: var ProcessPlan, op: ProcessPlanOp): bool =
+  if plan.opCount >= MaxProcessPlanOps.uint32:
+    plan.capacityExceeded = true
+    return false
+  plan.ops[plan.opCount.int] = op
+  inc plan.opCount
+  true
+
+proc addClearOp*(plan: var ProcessPlan, dstBuffer: uint32): bool =
+  plan.addProcessOp(
+    ProcessPlanOp(kind: pokClear, dstBuffer: dstBuffer, channelCount: 1)
+  )
+
+proc addCopyOp*(plan: var ProcessPlan, srcBuffer, dstBuffer: uint32): bool =
+  plan.addProcessOp(
+    ProcessPlanOp(
+      kind: pokCopy, srcBuffer: srcBuffer, dstBuffer: dstBuffer, channelCount: 1
+    )
+  )
+
+proc addAddOp*(plan: var ProcessPlan, srcBuffer, dstBuffer: uint32): bool =
+  plan.addProcessOp(
+    ProcessPlanOp(
+      kind: pokAdd, srcBuffer: srcBuffer, dstBuffer: dstBuffer, channelCount: 1
+    )
+  )
+
+proc addProcessOp*(
+    plan: var ProcessPlan,
+    entryIndex, srcBuffer, dstBuffer, channelCount: uint32,
+    srcBuffer2: uint32 = 0,
+    dstBuffer2: uint32 = 0,
+): bool =
+  plan.addProcessOp(
+    ProcessPlanOp(
+      kind: pokProcess,
+      srcBuffer: srcBuffer,
+      srcBuffer2: srcBuffer2,
+      dstBuffer: dstBuffer,
+      dstBuffer2: dstBuffer2,
+      entryIndex: entryIndex,
+      channelCount: channelCount,
+    )
+  )
+
 proc applyHostNodeState*(plan: var ProcessPlan, node: NodeData) =
   for i in 0 ..< plan.entryCount.int:
     if plan.entries[i].nodeId == node.id:
@@ -116,11 +176,138 @@ proc runtimeForPlugin(store: PluginRuntimeStore, pluginId: PluginId): PluginRunt
       return store.runtimes[i]
   PluginRuntimeRef()
 
+proc addHostBuffer(
+    plan: var ProcessPlan, kind: ProcessBufferKind, channel: uint32, index: var uint32
+): bool =
+  plan.addProcessBuffer(ProcessBufferSlot(kind: kind, channel: channel), index)
+
+proc addHostCopyOp(
+    plan: var ProcessPlan, srcKind, dstKind: ProcessBufferKind, channel: uint32
+): bool =
+  var srcIndex: uint32
+  var dstIndex: uint32
+  result = plan.addHostBuffer(srcKind, channel, srcIndex)
+  result = plan.addHostBuffer(dstKind, channel, dstIndex) and result
+  result = plan.addCopyOp(srcIndex, dstIndex) and result
+
+proc addHostAddOp(
+    plan: var ProcessPlan, srcKind, dstKind: ProcessBufferKind, channel: uint32
+): bool =
+  var srcIndex: uint32
+  var dstIndex: uint32
+  result = plan.addHostBuffer(srcKind, channel, srcIndex)
+  result = plan.addHostBuffer(dstKind, channel, dstIndex) and result
+  result = plan.addAddOp(srcIndex, dstIndex) and result
+
+proc addHostClearOp(
+    plan: var ProcessPlan, dstKind: ProcessBufferKind, channel: uint32
+): bool =
+  var dstIndex: uint32
+  result = plan.addHostBuffer(dstKind, channel, dstIndex)
+  result = plan.addClearOp(dstIndex) and result
+
+proc pluginEntryIndex(plan: ProcessPlan, nodeId: NodeId): int =
+  for i in 0 ..< plan.entryCount.int:
+    if plan.entries[i].nodeId == nodeId:
+      return i
+  -1
+
+proc channelCountForMode(mode: AudioIoMode): uint32 =
+  case mode
+  of aimBypass: 0
+  of aimMonoLeftToStereo: 1
+  of aimStereo: 2
+
+proc addHostProcessOp(plan: var ProcessPlan, entryIndex: uint32): bool =
+  if entryIndex >= plan.entryCount:
+    return false
+  let channelCount = channelCountForMode(plan.entries[entryIndex.int].ioMode)
+  if channelCount == 0:
+    return false
+
+  var inputStart: uint32
+  var outputStart: uint32
+  var input2: uint32
+  var output2: uint32
+  result = plan.addHostBuffer(pbkHostInput, 0, inputStart)
+  result = plan.addHostBuffer(pbkHostOutput, 0, outputStart) and result
+  if channelCount > 1:
+    result = plan.addHostBuffer(pbkHostInput, 1, input2) and result
+    result = plan.addHostBuffer(pbkHostOutput, 1, output2) and result
+  else:
+    input2 = inputStart
+    result = plan.addHostBuffer(pbkHostOutput, 1, output2) and result
+  result =
+    plan.addProcessOp(
+      entryIndex, inputStart, outputStart, channelCount, input2, output2
+    ) and result
+
+proc cableTouchesAudioOutput(
+    m: NilrackModel, rackId: RackId, outputNode: NodeId
+): bool =
+  for cableId in m.cablesInRack(rackId):
+    let cable = m.cableData(cableId)
+    if cable.isNone:
+      continue
+    let dstPort = m.portData(cable.get.dstPort)
+    if dstPort.isSome and dstPort.get.nodeId == outputNode and
+        dstPort.get.kind == pkAudio:
+      return true
+  false
+
+proc addHostCableOps(plan: var ProcessPlan, m: NilrackModel, rackId: RackId) =
+  var outputWritten: array[2, bool]
+  for cableId in m.cablesInRack(rackId):
+    let cable = m.cableData(cableId)
+    if cable.isNone:
+      continue
+    let srcPort = m.portData(cable.get.srcPort)
+    let dstPort = m.portData(cable.get.dstPort)
+    if srcPort.isNone or dstPort.isNone:
+      continue
+    if srcPort.get.kind != pkAudio or dstPort.get.kind != pkAudio:
+      continue
+    let srcNode = m.nodeData(srcPort.get.nodeId)
+    let dstNode = m.nodeData(dstPort.get.nodeId)
+    if srcNode.isNone or dstNode.isNone:
+      continue
+    if srcNode.get.kind != nkInput or dstNode.get.kind != nkOutput:
+      continue
+
+    let channels = min(srcPort.get.channelCount, dstPort.get.channelCount)
+    for channel in 0'u32 ..< min(channels, 2'u32):
+      if outputWritten[channel.int]:
+        discard plan.addHostAddOp(pbkHostInput, pbkHostOutput, channel)
+      else:
+        discard plan.addHostCopyOp(pbkHostInput, pbkHostOutput, channel)
+        outputWritten[channel.int] = true
+
+  for nodeId in m.nodesInRack(rackId):
+    let node = m.nodeData(nodeId)
+    if node.isNone or node.get.kind != nkOutput:
+      continue
+    if m.cableTouchesAudioOutput(rackId, nodeId):
+      continue
+    let output = m.mainAudioPortForNode(nodeId, pdIn)
+    if output.id == NullPortId or output.kind != pkAudio:
+      continue
+    for channel in 0'u32 ..< min(output.channelCount, 2'u32):
+      discard plan.addHostClearOp(pbkHostOutput, channel)
+
+proc rackForCompiledPlan(m: NilrackModel, compiled: ProcessPlan): RackId =
+  for i in 0 ..< compiled.nodeCount.int:
+    let node = m.nodeData(compiled.nodes[i])
+    if node.isSome:
+      return node.get.rackId
+  NullRackId
+
 proc buildProcessPlanFromCompiledGraph*(
     m: NilrackModel, compiled: ProcessPlan, runtimes: PluginRuntimeStore
 ): ProcessPlan =
   result = compiled
   result.entryCount = 0
+  result.bufferCount = 0
+  result.opCount = 0
   for i in 0 ..< compiled.nodeCount.int:
     let nodeId = compiled.nodes[i]
     let node = m.nodeData(nodeId)
@@ -143,3 +330,12 @@ proc buildProcessPlanFromCompiledGraph*(
         active: mode != aimBypass and not node.get.bypassed and not node.get.muted,
       )
     )
+
+  let rackId = m.rackForCompiledPlan(compiled)
+  if rackId != NullRackId:
+    result.addHostCableOps(m, rackId)
+
+  for i in 0 ..< compiled.nodeCount.int:
+    let entryIndex = result.pluginEntryIndex(compiled.nodes[i])
+    if entryIndex >= 0:
+      discard result.addHostProcessOp(entryIndex.uint32)

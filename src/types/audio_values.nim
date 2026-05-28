@@ -4,6 +4,8 @@ import core
 const
   MaxProcessPlanNodes* = 64
   MaxProcessPlanEntries* = 64
+  MaxProcessPlanBuffers* = 16
+  MaxProcessPlanOps* = 128
   MaxProcessPlanPluginTargets* = 64
   MaxProcessPlanParamTargets* = 256
   MaxProcessPlanEventPortTargets* = 128
@@ -46,6 +48,29 @@ type
     ioMode*: AudioIoMode
     active*: bool
 
+  ProcessBufferKind* = enum
+    pbkHostInput
+    pbkHostOutput
+
+  ProcessBufferSlot* = object
+    kind*: ProcessBufferKind
+    channel*: uint32
+
+  ProcessOpKind* = enum
+    pokClear
+    pokCopy
+    pokAdd
+    pokProcess
+
+  ProcessPlanOp* = object
+    kind*: ProcessOpKind
+    srcBuffer*: uint32
+    srcBuffer2*: uint32
+    dstBuffer*: uint32
+    dstBuffer2*: uint32
+    entryIndex*: uint32
+    channelCount*: uint32
+
   ProcessParamTarget* = object
     pluginId*: PluginId
     paramId*: ParamId
@@ -56,6 +81,10 @@ type
     nodes*: array[MaxProcessPlanNodes, NodeId]
     entryCount*: uint32
     entries*: array[MaxProcessPlanEntries, AudioProcessEntry]
+    bufferCount*: uint32
+    buffers*: array[MaxProcessPlanBuffers, ProcessBufferSlot]
+    opCount*: uint32
+    ops*: array[MaxProcessPlanOps, ProcessPlanOp]
     pluginTargetCount*: uint32
     pluginTargets*: array[MaxProcessPlanPluginTargets, PluginId]
     paramTargetCount*: uint32

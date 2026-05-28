@@ -3,6 +3,7 @@ import std/unittest
 import ../src/plugins/plugin_runtime_api
 import ../src/state/engine
 import ../src/systems/graph_compile
+import ../src/systems/graph_process_plan
 import ../src/types/[audio_values, core, graph_values, plugin_runtime_values]
 
 proc testProcess(
@@ -89,6 +90,50 @@ suite "graph compile errors":
     check report.plan.pluginTargetCount == 1
     check report.plan.pluginTargets[0] == pluginId
     check report.plan.paramTargetCount == 1
+
+  test "compiled input to output graph builds host copy ops":
+    var model = NilrackModel()
+    var runtimes: PluginRuntimeStore
+    let rackId = model.rackCreate("rack")
+    let inputNode = model.nodeCreate(rackId, nkInput, "input")
+    let outputNode = model.nodeCreate(rackId, nkOutput, "output")
+    let inputOut = model.portCreate(
+      inputNode, pkAudio, pdOut, 0, "out", channelCount = 2, isMain = true
+    )
+    let outputIn = model.portCreate(
+      outputNode, pkAudio, pdIn, 0, "in", channelCount = 2, isMain = true
+    )
+    discard model.cableCreate(rackId, inputOut, outputIn)
+
+    let report = model.compileRackGraph(rackId, runtimes)
+    let plan = model.buildProcessPlanFromCompiledGraph(report.plan, runtimes)
+
+    check not report.hasCompileErrors
+    check plan.bufferCount == 4
+    check plan.opCount == 2
+    check plan.ops[0].kind == pokCopy
+    check plan.ops[1].kind == pokCopy
+
+  test "compiled direct host fan-in emits add ops":
+    var model = NilrackModel()
+    var runtimes: PluginRuntimeStore
+    let rackId = model.rackCreate("rack")
+    let inputA = model.nodeCreate(rackId, nkInput, "input a")
+    let inputB = model.nodeCreate(rackId, nkInput, "input b")
+    let outputNode = model.nodeCreate(rackId, nkOutput, "output")
+    let inputAOut = model.portCreate(inputA, pkAudio, pdOut, 0, "out")
+    let inputBOut = model.portCreate(inputB, pkAudio, pdOut, 0, "out")
+    let outputIn = model.portCreate(outputNode, pkAudio, pdIn, 0, "in")
+    discard model.cableCreate(rackId, inputAOut, outputIn)
+    discard model.cableCreate(rackId, inputBOut, outputIn)
+
+    let report = model.compileRackGraph(rackId, runtimes)
+    let plan = model.buildProcessPlanFromCompiledGraph(report.plan, runtimes)
+
+    check not report.hasCompileErrors
+    check plan.opCount == 2
+    check plan.ops[0].kind == pokCopy
+    check plan.ops[1].kind == pokAdd
 
   test "rejects missing plugin runtime":
     var model = NilrackModel()

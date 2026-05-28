@@ -141,7 +141,7 @@ CLAP workflow on top of that foundation.
 - [x] `src/systems/graph_process_plan.nim`: build ordered plugin process entries
   and target lookup tables from the compiled graph, not only the single-plugin
   helper
-- [ ] Expand compiled bus cables into bounded clear/copy/add/process ops and
+- [x] Expand compiled bus cables into bounded clear/copy/add/process ops and
   buffer slots before broader patchbay routing work
 - [x] Plugin node in rack UI: title bar and port slots
 - [x] Plugin node in rack UI: bypass toggle
