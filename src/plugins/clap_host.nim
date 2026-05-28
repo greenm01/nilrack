@@ -33,6 +33,9 @@ type
     plugin*: ClapLoadedPlugin
     descriptor*: PluginDescriptor
 
+  ClapStateWriteContext = object
+    data: seq[byte]
+
 proc cstr(value: cstring): string =
   if value.isNil:
     ""
@@ -83,6 +86,21 @@ proc dropOutputEvent(
   discard list
   discard event
   false
+
+proc clapStateWrite(
+    stream: ptr ClapOStream, buffer: pointer, size: uint64
+): int64 {.cdecl, raises: [].} =
+  if stream.isNil or stream.ctx.isNil or buffer.isNil:
+    return -1
+  try:
+    let count = size.int
+    let source = cast[ptr UncheckedArray[byte]](buffer)
+    let ctx = cast[ptr ClapStateWriteContext](stream.ctx)
+    for index in 0 ..< count:
+      ctx.data.add(source[index])
+    int64(count)
+  except CatchableError:
+    -1
 
 proc initProcessStorage(loaded: ClapLoadedPlugin) =
   loaded.inputBuffer = ClapAudioBuffer(
@@ -229,6 +247,26 @@ proc queryParams(plugin: ptr ClapPlugin, descriptor: var PluginDescriptor) =
 proc queryState(plugin: ptr ClapPlugin, descriptor: var PluginDescriptor) =
   descriptor.hasState =
     not cast[ptr ClapPluginState](plugin.getExtension(plugin, ClapExtState.cstring)).isNil
+
+proc stateExtension(loaded: ClapLoadedPlugin): ptr ClapPluginState =
+  if loaded.isNil or loaded.plugin.isNil:
+    return nil
+  cast[ptr ClapPluginState](loaded.plugin.getExtension(
+    loaded.plugin, ClapExtState.cstring
+  ))
+
+proc saveClapState*(loaded: ClapLoadedPlugin, stateRef: var StateBlobRef): bool =
+  let ext = loaded.stateExtension()
+  if ext.isNil or ext.save.isNil:
+    return false
+
+  var ctx: ClapStateWriteContext
+  var stream = ClapOStream(ctx: addr ctx, write: clapStateWrite)
+  if not ext.save(loaded.plugin, addr stream):
+    return false
+
+  stateRef.data = ctx.data
+  true
 
 proc activateClap*(
     loaded: ClapLoadedPlugin, sampleRate: float64, minFrames, maxFrames: uint32

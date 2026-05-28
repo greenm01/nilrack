@@ -138,7 +138,7 @@ CLAP workflow on top of that foundation.
 - [x] `src/systems/param_mapping.nim`: normalized param value → draw + input target
 - [x] Parameter edits: generated controls update model and enqueue RT-safe
   `PluginParamValue` events
-- [ ] One-plugin state save smoke: plugin → `StateBlobRef`
+- [x] One-plugin state save smoke: plugin → `StateBlobRef`
 - [ ] One-plugin state restore smoke: `StateBlobRef` → stopped plugin → params
   applied after blob
 

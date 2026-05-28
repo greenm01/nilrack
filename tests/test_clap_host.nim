@@ -75,3 +75,12 @@ suite "CLAP host":
         loaded.plugin.stopClapProcessing()
         loaded.plugin.deactivateClap()
         loaded.plugin.close()
+
+    test "saves plugin state to a state blob":
+      let loaded = loadClapPlugin(pluginPath)
+      check loaded.ok
+      if loaded.ok:
+        check loaded.descriptor.hasState
+        var stateRef: StateBlobRef
+        check loaded.plugin.saveClapState(stateRef)
+        loaded.plugin.close()
