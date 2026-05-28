@@ -15,6 +15,18 @@ type
     aimMonoLeftToStereo
     aimStereo
 
+  AudioDiagnosticKind* = enum
+    adkQueueFull
+    adkEventBufferFull
+    adkMidiBufferFull
+    adkFeedbackDropped
+    adkStaleEvent
+    adkXRun
+    adkPluginProcessError
+    adkTopologyRefreshRequested
+    adkRetireQueueOverflow
+    adkReconfigRequested
+
   AudioBlockProcessProc* = proc(
     runtime: pointer, in1, in2, out1, out2: pointer, nframes: uint32, mode: AudioIoMode
   ): bool
@@ -58,6 +70,14 @@ type
     entries*: array[MaxRetiredProcessPlans, RetiredProcessPlan]
     overflowed*: bool
 
+  AudioCallbackDiagnostics* = object
+    generation*: Atomic[uint32]
+    counters*: array[AudioDiagnosticKind, Atomic[uint32]]
+
+  AudioCallbackDiagnosticsSnapshot* = object
+    generation*: uint32
+    counters*: array[AudioDiagnosticKind, uint32]
+
   JackClientHandle* = distinct pointer
   JackPortHandle* = distinct pointer
 
@@ -70,6 +90,7 @@ type
     sampleRate*: uint32
     bufferSize*: uint32
     planSlot*: ProcessPlanSlot
+    diagnostics*: AudioCallbackDiagnostics
 
   MeterSnapshot* = object
     levels*: array[4, float32]

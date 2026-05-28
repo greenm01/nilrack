@@ -1,6 +1,7 @@
 {.passL: "-ljack".}
 
 import ../types/audio_values
+import callback_diagnostics
 import process_callback
 import process_plan_store
 
@@ -62,6 +63,7 @@ proc initJackBackend*(b: var JackBackend, clientName: string) =
   b.sampleRate = jackGetSampleRate(client)
   b.bufferSize = jackGetBufferSize(client)
   b.planSlot.initProcessPlanSlot()
+  b.diagnostics.initAudioCallbackDiagnostics()
 
   b.inPort1 = cast[JackPortHandle](jackPortRegister(
     client, "input_1", jackDefaultAudioType, jackPortIsInput, 0

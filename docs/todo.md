@@ -77,7 +77,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
   and unsupported route policy surfaced to UI
 
 **Realtime diagnostics**
-- [ ] `AudioCallbackDiagnostics`: fixed atomic counters plus generation
+- [x] `AudioCallbackDiagnostics`: fixed atomic counters plus generation
 - [ ] UI snapshot path for diagnostics counters and graph health flags
 - [ ] JACK reconfiguration path: sample-rate or block-size change requests
   plan replacement and runtime reactivate off the callback
