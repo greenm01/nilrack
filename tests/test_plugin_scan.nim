@@ -62,6 +62,26 @@ suite "plugin scan":
     check doc[0].children[2].props["current"].get(float64) == 0.75
     check doc[0].children[3].props["generated"].get(bool)
 
+  test "formats scanner failure result with typed reason":
+    let failure = PluginScanProcessResult(
+      ok: false,
+      reason: psfrTimeout,
+      exitCode: -1,
+      timedOut: true,
+      error: "scanner timed out",
+    )
+
+    let doc = parseKdl(scanFailureToKdl("/tmp/broken.clap", 456, failure))
+    check doc.len == 1
+    check doc[0].name == "plugin-scan"
+    check doc[0].props["status"].get(string) == "failed"
+    check doc[0].props["path"].get(string) == "/tmp/broken.clap"
+    check doc[0].props["mtime"].get(int64) == 456
+    check doc[0].props["reason"].get(string) == "timeout"
+    check doc[0].props["exit-code"].get(int) == -1
+    check doc[0].props["timed-out"].get(bool)
+    check doc[0].props["error"].get(string) == "scanner timed out"
+
   test "scanner process runner accepts valid KDL output":
     let printfExe = findExe("printf")
     if printfExe.len == 0:

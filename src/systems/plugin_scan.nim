@@ -23,6 +23,14 @@ proc portDirectionName(direction: PortDirection): string =
   of pdIn: "in"
   of pdOut: "out"
 
+proc failureReasonName(reason: PluginScanFailureReason): string =
+  case reason
+  of psfrNone: "none"
+  of psfrTimeout: "timeout"
+  of psfrNonZeroExit: "non-zero-exit"
+  of psfrEmptyOutput: "empty-output"
+  of psfrMalformedKdl: "malformed-kdl"
+
 proc props(pairs: openArray[KdlProp]): Table[string, KdlVal] =
   result = initTable[string, KdlVal](pairs.len)
   for pair in pairs:
@@ -38,6 +46,9 @@ proc prop(key: string, val: uint32): KdlProp =
   (key: key, val: initKVal(val))
 
 proc prop(key: string, val: int64): KdlProp =
+  (key: key, val: initKVal(val))
+
+proc prop(key: string, val: int): KdlProp =
   (key: key, val: initKVal(val))
 
 proc prop(key: string, val: float64): KdlProp =
@@ -137,6 +148,32 @@ proc scanDescriptorToKdlDoc*(descriptor: PluginDescriptor, mtime: int64 = 0): Kd
 
 proc scanDescriptorToKdl*(descriptor: PluginDescriptor, mtime: int64 = 0): string =
   pretty(scanDescriptorToKdlDoc(descriptor, mtime))
+
+proc scanFailureToKdlDoc*(
+    path: string, mtime: int64, scanResult: PluginScanProcessResult
+): KdlDoc =
+  @[
+    initKNode(
+      "plugin-scan",
+      props = props(
+        [
+          prop("schema", PluginScanSchemaVersion.uint32),
+          prop("status", "failed"),
+          prop("path", path),
+          prop("mtime", mtime),
+          prop("reason", scanResult.reason.failureReasonName()),
+          prop("exit-code", scanResult.exitCode),
+          prop("timed-out", scanResult.timedOut),
+          prop("error", scanResult.error),
+        ]
+      ),
+    )
+  ]
+
+proc scanFailureToKdl*(
+    path: string, mtime: int64, scanResult: PluginScanProcessResult
+): string =
+  pretty(scanFailureToKdlDoc(path, mtime, scanResult))
 
 proc pluginMtime*(path: string): int64 =
   if not fileExists(path) and not dirExists(path):
