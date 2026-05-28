@@ -1,5 +1,6 @@
 import std/atomics
 import ../types/audio_values
+import backend_reconfiguration
 import process_plan_audio
 import process_plan_store
 
@@ -14,6 +15,16 @@ type JackPort {.importc: "jack_port_t", header: "jack/jack.h".} = object
 proc jackPortGetBuffer(
   port: ptr JackPort, nframes: uint32
 ): pointer {.importc: "jack_port_get_buffer", header: "jack/jack.h".}
+
+proc jackSampleRateChanged*(sampleRate: uint32, arg: pointer): cint {.cdecl.} =
+  let b = cast[ptr JackBackend](arg)
+  b[].requestSampleRateReconfiguration(sampleRate)
+  0
+
+proc jackBufferSizeChanged*(bufferSize: uint32, arg: pointer): cint {.cdecl.} =
+  let b = cast[ptr JackBackend](arg)
+  b[].requestBufferSizeReconfiguration(bufferSize)
+  0
 
 proc jackProcess*(nframes: uint32, arg: pointer): cint {.cdecl.} =
   let b = cast[ptr JackBackend](arg)

@@ -78,6 +78,16 @@ type
     generation*: uint32
     counters*: array[AudioDiagnosticKind, uint32]
 
+  AudioReconfigurationRequest* = object
+    generation*: uint32
+    sampleRate*: uint32
+    bufferSize*: uint32
+
+  AudioReconfigurationState* = object
+    generation*: Atomic[uint32]
+    sampleRate*: Atomic[uint32]
+    bufferSize*: Atomic[uint32]
+
   JackClientHandle* = distinct pointer
   JackPortHandle* = distinct pointer
 
@@ -91,6 +101,7 @@ type
     bufferSize*: uint32
     planSlot*: ProcessPlanSlot
     diagnostics*: AudioCallbackDiagnostics
+    reconfiguration*: AudioReconfigurationState
 
   MeterSnapshot* = object
     levels*: array[4, float32]

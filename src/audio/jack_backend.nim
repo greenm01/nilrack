@@ -1,6 +1,7 @@
 {.passL: "-ljack".}
 
 import ../types/audio_values
+import backend_reconfiguration
 import callback_diagnostics
 import process_callback
 import process_plan_store
@@ -13,6 +14,8 @@ type
   JackPort {.importc: "jack_port_t", header: jackH.} = object
   JackStatusT {.importc: "jack_status_t", header: "jack/types.h".} = distinct cint
   JackProcessCallback = proc(nframes: uint32, arg: pointer): cint {.cdecl.}
+  JackSampleRateCallback = proc(nframes: uint32, arg: pointer): cint {.cdecl.}
+  JackBufferSizeCallback = proc(nframes: uint32, arg: pointer): cint {.cdecl.}
 
 proc jackClientOpen(
   name: cstring, options: cint, status: ptr JackStatusT
@@ -25,6 +28,14 @@ proc jackClientClose(
 proc jackSetProcessCallback(
   client: ptr JackClient, cb: JackProcessCallback, arg: pointer
 ): cint {.importc: "jack_set_process_callback", header: jackH.}
+
+proc jackSetSampleRateCallback(
+  client: ptr JackClient, cb: JackSampleRateCallback, arg: pointer
+): cint {.importc: "jack_set_sample_rate_callback", header: jackH.}
+
+proc jackSetBufferSizeCallback(
+  client: ptr JackClient, cb: JackBufferSizeCallback, arg: pointer
+): cint {.importc: "jack_set_buffer_size_callback", header: jackH.}
 
 proc jackPortRegister(
   client: ptr JackClient,
@@ -64,6 +75,7 @@ proc initJackBackend*(b: var JackBackend, clientName: string) =
   b.bufferSize = jackGetBufferSize(client)
   b.planSlot.initProcessPlanSlot()
   b.diagnostics.initAudioCallbackDiagnostics()
+  b.reconfiguration.initAudioReconfigurationState(b.sampleRate, b.bufferSize)
 
   b.inPort1 = cast[JackPortHandle](jackPortRegister(
     client, "input_1", jackDefaultAudioType, jackPortIsInput, 0
@@ -79,6 +91,8 @@ proc initJackBackend*(b: var JackBackend, clientName: string) =
   ))
 
   discard jackSetProcessCallback(client, jackProcess, b.addr)
+  discard jackSetSampleRateCallback(client, jackSampleRateChanged, b.addr)
+  discard jackSetBufferSizeCallback(client, jackBufferSizeChanged, b.addr)
 
 proc activateJack*(b: var JackBackend) =
   let client = cast[ptr JackClient](b.client)

@@ -2,6 +2,7 @@ import std/[atomics, os]
 import state/engine
 import platform/wayland_app
 import render/renderer
+import audio/backend_reconfiguration
 import audio/jack_backend
 import audio/process_callback
 import systems/render_projection
@@ -74,6 +75,7 @@ when isMainModule:
   initJackBackend(jack, "nilrack")
 
   var processPlan: ProcessPlan
+  var lastBackendReconfigGeneration: uint32
   if not activeClap.isNil:
     if not activeClap.activateClap(jack.sampleRate.float64, 1, jack.bufferSize):
       stderr.writeLine("nilrack: failed to activate CLAP plugin")
@@ -110,6 +112,20 @@ when isMainModule:
           app.running = false
       else:
         discard
+    if jack.consumeAudioReconfigurationRequest(lastBackendReconfigGeneration):
+      if not activeClap.isNil:
+        activeClap.stopClapProcessing()
+        activeClap.deactivateClap()
+        if activeClap.activateClap(jack.sampleRate.float64, 1, jack.bufferSize) and
+            activeClap.startClapProcessing():
+          processPlan = buildSingleClapProcessPlan(
+            activeAttach.nodeId, activeAttach.pluginId, activeDescriptor, activeClap
+          )
+          discard jack.publishJackProcessPlan(addr processPlan)
+        else:
+          stderr.writeLine(
+            "nilrack: failed to reactivate CLAP plugin after JACK change"
+          )
     let mIn = meterLevels[0].load(moRelaxed)
     let mOut = meterLevels[1].load(moRelaxed)
     frame.project(model, app.width.float32, app.height.float32, mIn, mOut)
