@@ -9,7 +9,12 @@ and design principle. The domain docs below go deeper on each subsystem.
 - [dod.md](dod.md) — data model, storage, operations, systems, snapshots
 - [ui.md](ui.md) — TEA main loop, draw list, rack graph editor, widget layer
 - [audio.md](audio.md) — audio engine, JACK backend, realtime rules, ProcessPlan
+- [audio-routing.md](audio-routing.md) — cables, buses, graph compile, realtime plan
 - [plugins.md](plugins.md) — plugin adapters, out-of-process scanning, UI embedding
+- [plugin-runtime.md](plugin-runtime.md) — plugin runtime boundary and Carla prior art
+- [plugin-lifecycle.md](plugin-lifecycle.md) — runtime states, plan publication, deferred destroy
+- [graph-compile.md](graph-compile.md) — model-to-ProcessPlan compile contract
+- [plugin-events.md](plugin-events.md) — params, gestures, MIDI, transport, feedback
 - [session.md](session.md) — session model, KDL format, scan cache
 - [janet.md](janet.md) — scripting layer, event→command pattern, what Janet owns
 - [stack.md](stack.md) — all dependencies with rationale

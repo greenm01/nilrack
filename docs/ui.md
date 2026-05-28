@@ -60,6 +60,12 @@ arbitrary positions. Cables are cubic bezier curves from output port slots to
 input port slots. Signal type (audio, MIDI, CV) drives cable color. Signal
 level can drive cable alpha or thickness.
 
+Audio cables are bus-level by default. A stereo plugin shows one audio input
+port and one audio output port with a channel count badge, not separate left
+and right cables. Graph compile expands the cable into channel routing for the
+audio thread. Advanced channel mapping can live in an inspector later. See
+[audio-routing.md](audio-routing.md).
+
 Key interactions:
 
 - pan and zoom the canvas

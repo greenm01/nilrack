@@ -13,7 +13,12 @@ Domain docs:
 [dod.md](dod.md) —
 [ui.md](ui.md) —
 [audio.md](audio.md) —
+[audio-routing.md](audio-routing.md) —
 [plugins.md](plugins.md) —
+[plugin-runtime.md](plugin-runtime.md) —
+[plugin-lifecycle.md](plugin-lifecycle.md) —
+[graph-compile.md](graph-compile.md) —
+[plugin-events.md](plugin-events.md) —
 [session.md](session.md) —
 [janet.md](janet.md) —
 [stack.md](stack.md)
@@ -93,7 +98,10 @@ the draw command set.
 
 The audio engine owns the realtime graph. At callback time it reads a compiled
 `ProcessPlan` and preallocated queues. It never allocates, logs, or touches
-application state. See [audio.md](audio.md).
+application state. Routing is patchbay-first in the model and compiled into
+fixed realtime work. See [audio.md](audio.md) and
+[audio-routing.md](audio-routing.md). The exact model-to-plan contract is in
+[graph-compile.md](graph-compile.md).
 
 ### JACK Backend
 
@@ -105,7 +113,12 @@ backend interface. See [audio.md](audio.md).
 
 v1 hosts CLAP, LV2, and VST3 as adapters into one internal plugin model. The
 rack graph does not know which format produced a node. Plugin scanning runs
-out-of-process. See [plugins.md](plugins.md).
+out-of-process. The realtime boundary uses opaque plugin runtime refs and a
+small ops table, following Carla's proven host division while keeping nilrack's
+data-oriented model. See [plugins.md](plugins.md) and
+[plugin-runtime.md](plugin-runtime.md). Plugin lifetime and realtime event
+flow are covered by [plugin-lifecycle.md](plugin-lifecycle.md) and
+[plugin-events.md](plugin-events.md).
 
 ### Plugin UI Embedding
 

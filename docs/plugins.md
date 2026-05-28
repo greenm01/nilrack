@@ -24,6 +24,13 @@ The rack graph processes nodes through one internal plugin instance interface.
 Format tags (`PluginApi` enum) live in the plugin record — they do not leak
 into the graph, engine, or UI.
 
+At runtime, the internal interface is a small ops table plus an opaque runtime
+pointer. `ProcessPlan` stores those runtime refs. Format adapters translate
+generic process and parameter calls into CLAP, LV2, or VST3 calls. See
+[plugin-runtime.md](plugin-runtime.md). Live runtime ownership and destruction
+rules are in [plugin-lifecycle.md](plugin-lifecycle.md). Realtime parameter,
+MIDI, transport, and feedback records are in [plugin-events.md](plugin-events.md).
+
 ## CLAP
 
 Plain C ABI. The cleanest first implementation path. CLAP's host model is

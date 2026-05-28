@@ -12,7 +12,7 @@ At startup or graph edit time, it allocates:
 - audio buffers
 - event buffers
 - plugin process structures
-- graph nodes and edges
+- compiled graph nodes and channel edges
 - command queues
 - meter snapshots
 
@@ -61,8 +61,9 @@ audio callback reads immutable plan
 `ProcessPlan` contains only what the callback needs:
 
 - ordered node list
-- plugin process handles
+- plugin runtime refs
 - port buffer bindings
+- clear, copy, add, and process ops
 - event queues
 - parameter slots
 - bypass and mute flags
@@ -70,8 +71,13 @@ audio callback reads immutable plan
 
 The plan is compiled on the UI thread whenever the graph changes. A new plan
 atomically replaces the old one. The callback always reads the current plan.
+Plugin runtime refs point to a format-neutral ops table. The callback drains
+generic parameter edits and lets the adapter map them to CLAP, LV2, or VST3.
+Bus-level cables are expanded to channel-level routing during graph compile.
 
-See [dod.md](dod.md) for the full realtime model.
+See [audio-routing.md](audio-routing.md), [graph-compile.md](graph-compile.md),
+[plugin-events.md](plugin-events.md), [dod.md](dod.md), and
+[plugin-runtime.md](plugin-runtime.md) for the full realtime model.
 
 ## Audio-to-UI State
 

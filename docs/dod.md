@@ -41,6 +41,16 @@ platform/plugin/audio adapter
 External handles are fields in records. They are not the source of truth for
 relationships.
 
+Plugin runtimes follow the same rule. Loaded CLAP, LV2, and VST3 instances are
+opaque handles behind compiled runtime records and function tables. The graph
+does not grow a second plugin object model. See
+[plugin-runtime.md](plugin-runtime.md).
+
+Cables follow it too. `CableData` is a passive bus-level relationship between
+two `PortId` values. Routing policy lives in graph compile, where cables become
+channel edges and realtime ops. Entity operations maintain indexes; they do
+not decide audio mixing rules. See [audio-routing.md](audio-routing.md).
+
 ## Main Loop
 
 The UI thread runs a TEA loop. Every event — Wayland input, IPC command, audio
@@ -454,8 +464,9 @@ audio callback reads immutable plan
 `ProcessPlan` contains only data the callback needs:
 
 - ordered node list
-- plugin process handles
+- plugin runtime refs
 - port buffer bindings
+- clear, copy, add, and process ops
 - event queues
 - parameter slots
 - bypass/mute flags
@@ -467,6 +478,9 @@ modify UI state, or call high-level Nim code that may allocate.
 UI-to-audio changes cross preallocated queues. Audio-to-UI data crosses through
 snapshots: meters, XRuns, transport state, plugin process errors, and graph
 health.
+
+See [graph-compile.md](graph-compile.md) and [plugin-events.md](plugin-events.md)
+for the compile and event contracts.
 
 ## Render Model
 

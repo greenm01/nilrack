@@ -64,6 +64,10 @@ Load one CLAP plugin by path. Prove the plugin model, generated controls,
 parameter editing, and state persistence. See [architecture.md](architecture.md)
 milestone 2 and [plugins.md](plugins.md).
 
+Foundation contracts for this phase live in [plugin-runtime.md](plugin-runtime.md),
+[plugin-lifecycle.md](plugin-lifecycle.md), [audio-routing.md](audio-routing.md),
+[graph-compile.md](graph-compile.md), and [plugin-events.md](plugin-events.md).
+
 - [x] CLAP C bindings: entry, host, factory, plugin instance, audio ports,
   params, state, process structs
 - [x] `src/plugins/clap_host.nim`: load plugin by path, instantiate, query
