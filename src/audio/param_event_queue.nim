@@ -1,4 +1,5 @@
 import ../types/[audio_values, core]
+import audio_feedback
 import callback_diagnostics
 import process_plan_targets
 import rt_queue
@@ -41,6 +42,7 @@ proc enqueuePluginParamEvent*(backend: var JackBackend, event: PluginParamEvent)
   result = backend.paramEvents.push(event)
   if not result:
     backend.diagnostics.incrementAudioDiagnostic(adkQueueFull)
+    backend.feedback.markAudioFeedback(affQueueOverflow)
 
 proc enqueuePluginParamValue*(
     backend: var JackBackend,
@@ -95,4 +97,5 @@ proc popValidatedPluginParamEvent*(
       event = candidate
       return true
     backend.diagnostics.incrementAudioDiagnostic(adkStaleEvent)
+    backend.feedback.markAudioFeedback(affStaleEvent)
   false

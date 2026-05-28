@@ -89,7 +89,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
   current plan
 - [x] Gesture overflow policy: no orphaned begin/end state
 - [x] MIDI/event edge buffers: bounded merge by sample offset
-- [ ] Audio-to-UI feedback flags for stale events, process errors, topology
+- [x] Audio-to-UI feedback flags for stale events, process errors, topology
   refresh, overflow, and state dirty
 
 **Plugin runtime boundary**

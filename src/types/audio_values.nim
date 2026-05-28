@@ -31,6 +31,13 @@ type
     adkRetireQueueOverflow
     adkReconfigRequested
 
+  AudioFeedbackFlag* = enum
+    affStaleEvent
+    affProcessError
+    affTopologyRefresh
+    affQueueOverflow
+    affStateDirty
+
   AudioBlockProcessProc* = proc(
     runtime: pointer, in1, in2, out1, out2: pointer, nframes: uint32, mode: AudioIoMode
   ): bool
@@ -81,6 +88,12 @@ type
   AudioCallbackDiagnosticsSnapshot* = object
     generation*: uint32
     counters*: array[AudioDiagnosticKind, uint32]
+
+  AudioFeedbackFlags* = object
+    bits*: Atomic[uint32]
+
+  AudioFeedbackSnapshot* = object
+    flags*: set[AudioFeedbackFlag]
 
   AudioReconfigurationRequest* = object
     generation*: uint32
@@ -137,6 +150,7 @@ type
     bufferSize*: uint32
     planSlot*: ProcessPlanSlot
     diagnostics*: AudioCallbackDiagnostics
+    feedback*: AudioFeedbackFlags
     reconfiguration*: AudioReconfigurationState
     paramEvents*: RtQueue[PluginParamEvent, MaxPluginParamEvents]
     paramGestures*: PluginParamGestureTracker

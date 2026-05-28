@@ -1,6 +1,6 @@
 import std/unittest
 
-import ../src/audio/[callback_diagnostics, param_event_queue]
+import ../src/audio/[audio_feedback, callback_diagnostics, param_event_queue]
 import ../src/systems/graph_process_plan
 import ../src/types/[audio_values, core]
 
@@ -10,6 +10,7 @@ suite "plugin param event queue":
     var plan: ProcessPlan
     var event: PluginParamEvent
     backend.diagnostics.initAudioCallbackDiagnostics()
+    backend.feedback.initAudioFeedbackFlags()
     check plan.addPluginTarget(PluginId(1))
     check plan.addParamTarget(PluginId(1), ParamId(10))
 
@@ -23,10 +24,12 @@ suite "plugin param event queue":
 
     let diagnostics = backend.diagnostics.loadAudioCallbackDiagnostics()
     check diagnostics.diagnosticCount(adkStaleEvent) == 1
+    check affStaleEvent in backend.feedback.takeAudioFeedbackSnapshot().flags
 
   test "reports queue overflow without growing storage":
     var backend: JackBackend
     backend.diagnostics.initAudioCallbackDiagnostics()
+    backend.feedback.initAudioFeedbackFlags()
 
     for i in 0 ..< MaxPluginParamEvents - 1:
       check backend.enqueuePluginParamValue(PluginId(1), ParamId(i.uint32 + 1), 0.5)
@@ -35,10 +38,12 @@ suite "plugin param event queue":
 
     let diagnostics = backend.diagnostics.loadAudioCallbackDiagnostics()
     check diagnostics.diagnosticCount(adkQueueFull) == 1
+    check affQueueOverflow in backend.feedback.takeAudioFeedbackSnapshot().flags
 
   test "gesture begin overflow does not create active gesture state":
     var backend: JackBackend
     backend.diagnostics.initAudioCallbackDiagnostics()
+    backend.feedback.initAudioFeedbackFlags()
 
     for i in 0 ..< MaxPluginParamEvents - 1:
       check backend.enqueuePluginParamValue(PluginId(1), ParamId(i.uint32 + 1), 0.5)
@@ -49,6 +54,7 @@ suite "plugin param event queue":
   test "gesture end overflow clears active gesture state":
     var backend: JackBackend
     backend.diagnostics.initAudioCallbackDiagnostics()
+    backend.feedback.initAudioFeedbackFlags()
 
     check backend.enqueuePluginParamGestureBegin(PluginId(1), ParamId(10))
     check backend.hasActivePluginParamGesture(PluginId(1), ParamId(10))
