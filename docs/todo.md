@@ -81,7 +81,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
 - [x] UI snapshot path for diagnostics counters and graph health flags
 - [x] JACK reconfiguration path: sample-rate or block-size change requests
   plan replacement and runtime reactivate off the callback
-- [ ] Realtime rule audit for callback code: no allocation, logging, locks, or
+- [x] Realtime rule audit for callback code: no allocation, logging, locks, or
   model access
 
 **Event queues**
