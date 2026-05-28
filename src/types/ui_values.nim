@@ -15,7 +15,6 @@ type
     msgPointerScroll
     msgKeyPress
     msgKeyRelease
-    msgTextInput
     msgResize
     msgFrameCallback
     msgAudioSnapshot
@@ -25,4 +24,19 @@ type
     msgCommand
 
   Msg* = object
-    kind*: MsgKind
+    case kind*: MsgKind
+    of msgPointerMotion:
+      motionX*, motionY*: float32
+    of msgPointerButton:
+      btnButton*: uint32
+      btnPressed*: bool
+      btnX*, btnY*: float32
+    of msgPointerScroll:
+      scrollAxis*: uint32
+      scrollValue*: float32
+    of msgKeyPress, msgKeyRelease:
+      keyCode*: uint32
+    of msgResize:
+      resizeW*, resizeH*: int32
+    else:
+      discard

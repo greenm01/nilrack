@@ -21,8 +21,7 @@ adds the operational details an agent needs to act safely.
    `nimble build*`, direct `nim c`, and related commands can share build
    outputs and corrupt or link against stale artifacts when run concurrently.
    Run these verification and build commands serially.
-7. Before committing code, run a targeted compile or check. Until the project
-   has a fuller build, use `nim c src/nilrack.nim`.
+7. Before committing code, run a build check with `nimble build`.
 8. Keep docs crisp. Follow `nilrack/docs/dreyer-style.md` for project
    documentation.
 9. Keep runtime code data-oriented. Follow `docs/dod.md` when adding state,
@@ -107,13 +106,13 @@ rg -n --glob '!docs/dreyer-style.md' "robust|seamless|leverag|In order to|The fa
 For current code changes:
 
 ```sh
-nim c src/nilrack.nim
+nimble build
 ```
 
 Clean generated local binaries before committing:
 
 ```sh
-rm -f src/nilrack
+rm -f nilrack
 ```
 
 If new tests, build steps, or live harnesses are added later, update this file
