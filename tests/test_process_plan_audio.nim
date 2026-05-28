@@ -5,8 +5,9 @@ import ../src/audio/process_plan_targets
 import ../src/plugins/clap_host
 import ../src/plugins/plugin_adapter
 import ../src/state/engine
+import ../src/systems/graph_compile
 import ../src/systems/graph_process_plan
-import ../src/types/[audio_values, core, plugin_values]
+import ../src/types/[audio_values, core, plugin_runtime_values, plugin_values]
 
 proc localClapPath(): string =
   let envPath = getEnv("NILRACK_TEST_CLAP")
@@ -112,6 +113,64 @@ suite "process plan audio":
     check hasLivePluginTarget(addr plan, attached.pluginId)
     check hasParamTarget(addr plan, attached.pluginId, paramId)
     check hasEventPortTarget(addr plan, portId)
+
+  test "builds process entries from compiled graph and runtime store":
+    var model = NilrackModel()
+    var runtimes: PluginRuntimeStore
+    let rackId = model.rackCreate("rack")
+    let pluginNode = model.nodeCreate(rackId, nkPlugin, "plugin")
+    discard model.portCreate(
+      pluginNode, pkAudio, pdIn, 0, "in", channelCount = 1, isMain = true
+    )
+    discard model.portCreate(
+      pluginNode, pkAudio, pdOut, 0, "out", channelCount = 1, isMain = true
+    )
+    let pluginId = model.pluginAttachToNode(
+      pluginNode, paClap, "/tmp/example.clap", "dev.nilrack.example", "Example"
+    )
+    runtimes.runtimes[0] = PluginRuntimeRef(
+      pluginId: pluginId, runtime: cast[pointer](1), ops: cast[ptr PluginRuntimeOps](1)
+    )
+    runtimes.count = 1
+
+    let compiled = model.compileRackGraph(rackId, runtimes)
+    let plan = model.buildProcessPlanFromCompiledGraph(compiled.plan, runtimes)
+
+    check not compiled.hasCompileErrors
+    check plan.nodeCount == 1
+    check plan.entryCount == 1
+    check plan.entries[0].nodeId == pluginNode
+    check plan.entries[0].pluginId == pluginId
+    check plan.entries[0].runtime == cast[pointer](1)
+    check plan.entries[0].processBlock == clapProcessAudioBlock
+    check plan.entries[0].ioMode == aimMonoLeftToStereo
+    check plan.entries[0].active
+
+  test "compiled graph process entries respect host bypass":
+    var model = NilrackModel()
+    var runtimes: PluginRuntimeStore
+    let rackId = model.rackCreate("rack")
+    let pluginNode = model.nodeCreate(rackId, nkPlugin, "plugin")
+    discard model.portCreate(
+      pluginNode, pkAudio, pdIn, 0, "in", channelCount = 1, isMain = true
+    )
+    discard model.portCreate(
+      pluginNode, pkAudio, pdOut, 0, "out", channelCount = 1, isMain = true
+    )
+    let pluginId = model.pluginAttachToNode(
+      pluginNode, paClap, "/tmp/example.clap", "dev.nilrack.example", "Example"
+    )
+    model.nodes.mEntity(pluginNode).bypassed = true
+    runtimes.runtimes[0] = PluginRuntimeRef(
+      pluginId: pluginId, runtime: cast[pointer](1), ops: cast[ptr PluginRuntimeOps](1)
+    )
+    runtimes.count = 1
+
+    let compiled = model.compileRackGraph(rackId, runtimes)
+    let plan = model.buildProcessPlanFromCompiledGraph(compiled.plan, runtimes)
+
+    check plan.entryCount == 1
+    check not plan.entries[0].active
 
   test "falls back to passthrough without a plan":
     var input1: array[8, float32]

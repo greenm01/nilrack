@@ -129,7 +129,7 @@ CLAP workflow on top of that foundation.
   unload through the runtime store
 - [x] `src/systems/graph_compile.nim`: one-rack, acyclic graph compile to a
   published `ProcessPlan`
-- [ ] `src/systems/graph_process_plan.nim`: build process plan from compiled
+- [x] `src/systems/graph_process_plan.nim`: build process plan from compiled
   graph, not only the single-plugin helper
 - [x] Plugin node in rack UI: title bar and port slots
 - [ ] Plugin node in rack UI: bypass toggle

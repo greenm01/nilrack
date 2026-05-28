@@ -1,5 +1,9 @@
+import std/options
+
 import ../plugins/clap_host
-import ../types/[audio_values, core, model, plugin_values]
+import ../state/[model, queries]
+import ../types/[audio_values, core, plugin_values]
+import ../types/plugin_runtime_values
 
 proc addPlanNode*(plan: var ProcessPlan, nodeId: NodeId): bool =
   if plan.nodeCount >= MaxProcessPlanNodes.uint32:
@@ -95,6 +99,66 @@ proc audioIoModeFor*(descriptor: PluginDescriptor): AudioIoMode =
   if input.channelCount == 2 and output.channelCount == 2:
     return aimStereo
   aimBypass
+
+proc mainAudioPortForNode(
+    m: NilrackModel, nodeId: NodeId, direction: PortDirection
+): PortData =
+  var fallback: PortData
+  for portId in m.portsForNode(nodeId):
+    let port = m.portData(portId)
+    if port.isNone or port.get.kind != pkAudio or port.get.direction != direction:
+      continue
+    if port.get.isMain:
+      return port.get
+    if fallback.id == NullPortId:
+      fallback = port.get
+  fallback
+
+proc audioIoModeForNode*(m: NilrackModel, nodeId: NodeId): AudioIoMode =
+  let input = m.mainAudioPortForNode(nodeId, pdIn)
+  let output = m.mainAudioPortForNode(nodeId, pdOut)
+  if input.channelCount == 1 and output.channelCount == 1:
+    return aimMonoLeftToStereo
+  if input.channelCount == 2 and output.channelCount == 2:
+    return aimStereo
+  aimBypass
+
+proc runtimeForPlugin(store: PluginRuntimeStore, pluginId: PluginId): PluginRuntimeRef =
+  for i in 0 ..< store.count.int:
+    if store.runtimes[i].pluginId == pluginId:
+      return store.runtimes[i]
+  PluginRuntimeRef()
+
+proc buildProcessPlanFromCompiledGraph*(
+    m: NilrackModel, compiled: ProcessPlan, runtimes: PluginRuntimeStore
+): ProcessPlan =
+  result = compiled
+  result.entryCount = 0
+  for i in 0 ..< compiled.nodeCount.int:
+    let nodeId = compiled.nodes[i]
+    let node = m.nodeData(nodeId)
+    if node.isNone or node.get.kind != nkPlugin:
+      continue
+    let pluginId = m.pluginForNode(nodeId)
+    if pluginId.isNone:
+      continue
+    let plugin = m.pluginData(pluginId.get)
+    if plugin.isNone or plugin.get.api != paClap:
+      continue
+    let runtime = runtimes.runtimeForPlugin(pluginId.get)
+    if runtime.runtime.isNil:
+      continue
+    let mode = m.audioIoModeForNode(nodeId)
+    discard result.addProcessEntry(
+      AudioProcessEntry(
+        nodeId: nodeId,
+        pluginId: pluginId.get,
+        runtime: runtime.runtime,
+        processBlock: clapProcessAudioBlock,
+        ioMode: mode,
+        active: mode != aimBypass and not node.get.bypassed and not node.get.muted,
+      )
+    )
 
 proc buildSingleClapProcessPlan*(
     nodeId: NodeId,
