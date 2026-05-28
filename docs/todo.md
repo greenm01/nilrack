@@ -12,7 +12,7 @@ relevant.
 - [x] Data-oriented design spec
 - [x] Domain docs (ui, audio, plugins, session, janet, stack)
 - [x] Source skeleton: types, state, entities, adapter stubs
-- [x] `nim c src/nilrack.nim` compiles clean
+- [x] `nimble build` compiles clean
 
 ---
 
@@ -22,15 +22,17 @@ Proves Wayland, GPU rendering, event dispatch, JACK, and the UI/audio thread
 boundary. No plugins yet. See [architecture.md](architecture.md) milestone 1.
 
 **Platform**
-- [ ] wayland-nim bindings: window, surface, input events, frame callbacks
-- [ ] `src/platform/wayland_app.nim`: create window, run dispatch loop
-- [ ] `src/platform/input.nim`: normalize Wayland events to `Msg`
+- [x] wayland-nim bindings: window, surface, input events, frame callbacks
+- [x] `src/platform/wayland_app.nim`: XDG shell window, dispatch loop, SHM fallback buffer
+- [x] `src/platform/input.nim`: pointer and keyboard events normalized to `Msg`
+- [x] `src/types/ui_values.nim`: `Msg` as object variant with typed payload
 
 **Renderer**
-- [ ] wgpu-native C bindings (device, swapchain, render pass, buffers)
-- [ ] `src/render/wgpu_backend.nim`: begin/end frame, submit draw list, resize
-- [ ] `src/render/software_backend.nim`: stub software backend for testing
-- [ ] `src/render/draw_list.nim`: `NilDrawList` append helpers
+- [x] webgpu-nim dep + `-d:wayland` + `-d:wgvkWGSL` compile flags (`config.nims`)
+- [x] `src/render/wgpu_backend.nim`: Wayland surface, adapter, device, swapchain, clear
+- [x] `src/render/renderer.nim`: begin/end frame, submit draw list (stub — clear only)
+- [x] `src/render/draw_list.nim`: `NilDrawList` append helpers
+- [x] `src/types/render_values.nim`: opaque wgpu handles, `WgpuBackend`, `Renderer` types
 - [ ] stb_truetype: glyph atlas build on startup, text run draw command
 
 **Audio**
@@ -41,7 +43,7 @@ boundary. No plugins yet. See [architecture.md](architecture.md) milestone 1.
 - [ ] `src/state/snapshot.nim`: real `compileProcessPlan` for audio passthrough
 
 **Main loop**
-- [ ] TEA update loop in `src/nilrack.nim`: collect `Msg`, update, view, submit
+- [x] TEA update loop in `src/nilrack.nim`: collect `Msg`, dispatch, handle close/Escape
 - [ ] `src/systems/ui_layout.nim`: rack shell layout (node area, status strip)
 - [ ] `src/systems/render_projection.nim`: model → `NilDrawList`
 - [ ] `src/systems/ui_hit_test.nim`: `inputTargetAt` hit testing

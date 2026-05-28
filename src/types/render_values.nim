@@ -26,3 +26,25 @@ type
 
   NilDrawList* = object
     cmds*: seq[NilDrawCmd]
+
+  # Opaque handles for wgpu objects. The adapter casts these to the real
+  # wgpu pointer types internally. Nothing outside src/render/ sees wgpu types.
+  WgpuInstance* = distinct pointer
+  WgpuSurface* = distinct pointer
+  WgpuAdapter* = distinct pointer
+  WgpuDevice* = distinct pointer
+  WgpuQueue* = distinct pointer
+
+  WgpuBackend* = object
+    instance*: WgpuInstance
+    surface*: WgpuSurface
+    adapter*: WgpuAdapter
+    device*: WgpuDevice
+    queue*: WgpuQueue
+    width*: uint32
+    height*: uint32
+    surfaceFormat*: uint32
+    surfaceAlphaMode*: uint32
+
+  Renderer* = object
+    backend*: WgpuBackend
