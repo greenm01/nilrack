@@ -78,11 +78,12 @@ is pure — it reads the model and emits draw and hit-test data. See
 
 ## Passing the Model
 
-`NilrackModel` is large. Never copy it except at explicit snapshot boundaries.
-Use Nim's borrow semantics to make the intent clear at every call site.
+`NilrackModel` is large. Never make an explicit copy except at snapshot
+boundaries. Use Nim's parameter modes to make the intent clear at every call
+site.
 
 **`var NilrackModel`** — mutation. Operations and the update function take the
-model by `var`. This is a mutable borrow, not a copy.
+model by `var`. The callee can modify the caller's model.
 
 ```nim
 proc rackCreate*(m: var NilrackModel, name: string): RackId = ...
@@ -90,14 +91,15 @@ proc nodeDestroy*(m: var NilrackModel, id: NodeId) = ...
 proc update*(m: var NilrackModel, msg: Msg): seq[Effect] = ...
 ```
 
-**`lent NilrackModel`** — read-only access. Queries, iterators, the view
-function, and systems in their read phase take the model as `lent`. No copy,
-no mutation — enforced by the type system.
+**`NilrackModel`** — read-only access. Queries, iterators, the view function,
+and systems in their read phase take the model as a plain non-`var`
+parameter. Nim does not allow mutation through that parameter, and the compiler
+may pass large non-`var` parameters by reference when that is faster.
 
 ```nim
-proc node*(m: lent NilrackModel, id: NodeId): lent NodeData = ...
-proc view*(m: lent NilrackModel): NilDrawList = ...
-proc cablesForRack*(m: lent NilrackModel, id: RackId): ... = ...
+proc node*(m: NilrackModel, id: NodeId): Option[NodeData] = ...
+proc view*(m: NilrackModel): NilDrawList = ...
+proc cablesForRack*(m: NilrackModel, id: RackId): ... = ...
 ```
 
 **Explicit copy** — snapshots only. Thread and API boundaries get copies, not
@@ -105,25 +107,29 @@ references. `ProcessPlan` is a copy for the audio thread. A session snapshot
 is a copy for serialization. Name the type to make the copy intentional.
 
 ```nim
-proc compileProcessPlan*(m: lent NilrackModel): ProcessPlan = ...
-proc sessionSnapshot*(m: lent NilrackModel): SessionSnapshot = ...
+proc compileProcessPlan*(m: NilrackModel): ProcessPlan = ...
+proc sessionSnapshot*(m: NilrackModel): SessionSnapshot = ...
 ```
 
 **`ref NilrackModel`** — do not use. Heap allocation, GC pressure, and unclear
 ownership. The model lives as a value in the app shell and is passed by `var`
-or `lent` as needed.
+or plain read-only parameter as needed.
 
 ### EntityManager Records
 
 The same rules apply to records inside the entity manager.
 
-`get` returns `lent T` — a read-only borrow into the dense array. `getMutable`
-returns `var T` — an in-place mutable reference, no copy. Use `getMutable` in
-operations when updating a field. Use `get` everywhere else.
+`entity` returns `Option[T]` by value. Use it for simple queries and tests.
+`mEntity` returns `var T` — an in-place mutable reference, no copy. Use
+`mEntity` in operations when updating a field.
+
+Borrowed read access can be added for measured hot paths by returning or
+yielding `lent T` from a storage routine. Do not use `lent NilrackModel` as a
+proc parameter; Nim 2.2 rejects that signature in normal procs.
 
 ```nim
-let node = m.nodes.get(id)          # lent NodeData, no copy
-var node = m.nodes.getMutable(id)   # var NodeData, in-place mutation
+let node = m.nodes.entity(id)       # Option[NodeData], by value
+var node = m.nodes.mEntity(id)      # var NodeData, in-place mutation
 node.bypassed = true
 ```
 
@@ -271,9 +277,9 @@ The entity manager only does CRUD:
 insert
 delete
 contains
-get
-getMutable
-items
+entity
+mEntity
+entities
 ```
 
 It does not understand plugins, cables, graph compilation, audio ports, or UI
