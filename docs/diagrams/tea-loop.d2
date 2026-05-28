@@ -1,0 +1,75 @@
+direction: right
+
+title: "UI TEA loop (one frame)" {
+  shape: text
+  style.font-size: 26
+  style.bold: true
+}
+
+collect: "collect events" {
+  style.fill: "#eef3ff"
+  direction: down
+  wayland: "Wayland input"
+  audio_snap: "audio snapshots"
+  plug_ev: "plugin events"
+  janet: "Janet messages"
+  scan_res: "scan results"
+  ipc: "IPC commands"
+}
+
+update: "update(model, msg)" {
+  shape: hexagon
+  style.fill: "#dbe6ff"
+  style.bold: true
+  pure: "pure function over Model"
+  ops: "mutates via entity ops"
+  eff: "produces effect list"
+}
+
+effects: Effects {
+  style.fill: "#fff3d6"
+  direction: down
+  publish: "publish ProcessPlan (atomic ptr swap)"
+  enqueue: "enqueue UI→audio param / midi events"
+  spawn: "spawn worker / scan / save job"
+}
+
+model: NilrackModel {
+  shape: cylinder
+  style.fill: "#cfd9ff"
+  style.bold: true
+}
+
+view: "view(model)" {
+  shape: hexagon
+  style.fill: "#dbe6ff"
+  pure: "pure function"
+  out: "→ NilDrawList + InputTargetList"
+}
+
+draw: "NilDrawList + InputTargetList" {
+  shape: page
+  style.fill: "#ffe9b3"
+}
+
+renderer: "Renderer (WGVK)" {
+  style.fill: "#ffd6d6"
+  sw: "software backend kept possible" {
+    shape: text
+    style.italic: true
+    style.font-size: 13
+  }
+}
+
+collect -> update: "Msg (typed union)"
+update -> model: "new model"
+update -> effects
+model -> view: read
+view -> draw
+draw -> renderer
+
+janet_note: "Janet runs as a UI guest with a per-frame fuel budget.\nDispatches Msg through the same channel as Wayland." {
+  shape: text
+  style.italic: true
+  style.font-size: 13
+}

@@ -1,0 +1,119 @@
+direction: down
+
+title: nilrack engine — panorama {
+  shape: text
+  style.font-size: 30
+  style.bold: true
+}
+
+ext: "External world" {
+  style.fill: "#f7f7f7"
+  direction: right
+  wayland: "Wayland (input · windows)"
+  jack: "JACK (audio I/O)"
+  midi: "MIDI devices"
+  plugins: "CLAP · LV2 · VST3 libs"
+  disk: "disk · session files"
+}
+
+ui: "UI thread" {
+  style.fill: "#eef3ff"
+  direction: down
+
+  platform: "Wayland platform"
+  janet: "Janet (UI guest, fuel-limited)"
+
+  tea: "TEA update" {
+    shape: hexagon
+    style.fill: "#dbe6ff"
+    style.bold: true
+  }
+
+  model: NilrackModel {
+    shape: cylinder
+    style.fill: "#cfd9ff"
+    style.bold: true
+  }
+
+  compile: graph_compile
+  view: "view(model)"
+  drawlist: "NilDrawList + InputTargetList" {
+    shape: page
+    style.fill: "#fff3d6"
+  }
+  renderer: "Renderer (WGVK)"
+  session: "session I/O (KDL + state blobs)"
+
+  platform -> tea: Msg
+  janet -> tea: Msg
+  tea -> model: "entity ops"
+  model -> compile: "dense tables + indexes"
+  model -> view: read
+  view -> drawlist
+  drawlist -> renderer
+  tea -> session: "save / load"
+}
+
+audio: "Audio thread (JACK realtime)" {
+  style.fill: "#ffe6e6"
+  direction: down
+
+  callback: "JACK callback" {
+    style.fill: "#ffcccc"
+    style.bold: true
+  }
+  plan: ProcessPlan {
+    shape: page
+    style.fill: "#ffd6d6"
+    style.bold: true
+  }
+  ops: "PluginRuntimeOps (format-neutral)"
+
+  clap: "CLAP adapter"
+  lv2: "LV2 adapter"
+  vst3: "VST3 adapter"
+
+  plan -> callback: read
+  callback -> ops: "fixed op order"
+  ops -> clap
+  ops -> lv2
+  ops -> vst3
+}
+
+workers: "Workers & helpers" {
+  style.fill: "#e8f5e8"
+  direction: down
+  scanner: "Plugin scanner (separate process)"
+  state: "State-save worker"
+  bridge: "XWayland bridge"
+  embed: "wayembed (native Wayland UI)"
+}
+
+ui.compile -> audio.plan: "ProcessPlan (atomic publish)" {
+  style.stroke-dash: 3
+  style.bold: true
+}
+ui.tea -> audio.callback: "param / midi events (ring buffer)" {
+  style.stroke-dash: 3
+}
+audio.callback -> ui.tea: "MeterSnapshot · XRuns · diagnostics" {
+  style.stroke-dash: 3
+}
+
+audio.clap -> ext.plugins
+audio.lv2 -> ext.plugins
+audio.vst3 -> ext.plugins
+audio.callback -> ext.jack: "audio out"
+ext.jack -> audio.callback: "audio in"
+
+ext.wayland -> ui.platform
+ext.midi -> ui.tea: "MIDI in"
+ui.session -> ext.disk
+
+ui.tea -> workers.scanner: "scan request"
+workers.scanner -> ui.tea: "KDL result"
+ui.tea -> workers.state: "save / load job"
+workers.state -> ui.tea: "result record"
+ui.tea -> workers.bridge: "embed XWayland editor"
+workers.bridge -> ui.tea: status
+ui.tea -> workers.embed: "embed Wayland editor"

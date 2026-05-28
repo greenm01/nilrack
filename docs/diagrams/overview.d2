@@ -1,0 +1,71 @@
+direction: down
+
+title: nilrack engine — overview {
+  shape: text
+  style.font-size: 28
+  style.bold: true
+}
+
+ui: "UI thread" {
+  style.fill: "#eef3ff"
+  direction: down
+
+  model: NilrackModel {
+    shape: cylinder
+    style.fill: "#cfd9ff"
+    style.bold: true
+  }
+  compile: graph_compile
+  view: "view(model)"
+  draw: NilDrawList {
+    shape: page
+    style.fill: "#fff3d6"
+  }
+  renderer: "Renderer (WGVK)"
+
+  model -> compile
+  model -> view
+  view -> draw
+  draw -> renderer
+}
+
+audio: "Audio thread (JACK realtime)" {
+  style.fill: "#ffe6e6"
+  direction: down
+
+  plan: ProcessPlan {
+    shape: page
+    style.fill: "#ffd6d6"
+    style.bold: true
+  }
+  callback: "JACK callback"
+  ops: PluginRuntimeOps
+  out: "audio out + meter snapshots" {
+    shape: cylinder
+  }
+
+  plan -> callback
+  callback -> ops
+  ops -> out
+}
+
+workers: "Workers (separate processes / threads)" {
+  style.fill: "#e8f5e8"
+  scanner: "Plugin scanner"
+  state: "State-save worker"
+  bridge: "XWayland bridge"
+}
+
+ui.compile -> audio.plan: "ProcessPlan (atomic publish)" {
+  style.stroke-dash: 3
+  style.bold: true
+}
+audio.out -> ui.model: "MeterSnapshot (lock-free)" {
+  style.stroke-dash: 3
+}
+ui.model -> workers: "scan / save / embed request" {
+  style.stroke-dash: 3
+}
+workers -> ui.model: "data records only" {
+  style.stroke-dash: 3
+}

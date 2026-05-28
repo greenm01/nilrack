@@ -1,0 +1,105 @@
+direction: down
+
+title: "plugin adapter pattern — one model, three formats" {
+  shape: text
+  style.font-size: 26
+  style.bold: true
+}
+
+graph: "Rack graph (NilrackModel)" {
+  style.fill: "#cfd9ff"
+  style.bold: true
+  note: "never knows which format produced a node" {
+    shape: text
+    style.italic: true
+    style.font-size: 13
+  }
+}
+
+internal: "Internal plugin model" {
+  style.fill: "#dbe6ff"
+  style.bold: true
+  direction: down
+
+  fields: "node fields" {
+    style.fill: "#eef3ff"
+    descriptors
+    ports
+    params
+    state: "state blobs"
+    proc: "process calls"
+    ui_caps: "UI capability records"
+    errors
+  }
+
+  ops: "PluginRuntimeOps (format-neutral vtable)" {
+    style.fill: "#cfd9ff"
+    style.bold: true
+    activate: "activate / deactivate"
+    process: "process(ctx)"
+    setp: "setParam / getParam"
+    save: "saveState / loadState"
+  }
+
+  ref: "PluginRuntimeRef (opaque runtime + ops ptr)" {
+    style.fill: "#cfd9ff"
+  }
+}
+
+adapters: Adapters {
+  style.fill: "#fff3d6"
+  direction: right
+
+  clap: "CLAP adapter" {
+    style.fill: "#ffe9b3"
+    h: "native handles" {
+      style.italic: true
+      style.font-size: 13
+      a: clap_plugin_t
+      b: clap_event_t
+    }
+  }
+  lv2: "LV2 adapter" {
+    style.fill: "#ffe9b3"
+    h: "native handles" {
+      style.italic: true
+      style.font-size: 13
+      a: "LV2 lib + ttl"
+      b: LV2_Atom
+    }
+  }
+  vst3: "VST3 adapter" {
+    style.fill: "#ffe9b3"
+    h: "native handles" {
+      style.italic: true
+      style.font-size: 13
+      a: "IComponent vtable"
+      b: ProcessData
+    }
+  }
+}
+
+scan: "Plugin scanner (SEPARATE PROCESS)" {
+  style.fill: "#e8f5e8"
+  note: "host survives plugin crashes" {
+    shape: text
+    style.italic: true
+    style.font-size: 13
+  }
+}
+
+ui_embed: "Plugin UI embedding" {
+  style.fill: "#fce4ec"
+  direction: right
+  wayembed: "wayembed (native Wayland)"
+  bridge: "isolated bridge (XWayland)"
+  generated: "generated parameter UI"
+}
+
+graph -> internal.ref: "node holds ref"
+internal.ref -> internal.ops: "vtable dispatch"
+internal.ops -> adapters.clap: dispatch
+internal.ops -> adapters.lv2: dispatch
+internal.ops -> adapters.vst3: dispatch
+scan -> internal.fields: "descriptors only (no live handles)"
+ui_embed -> adapters: "open editor for live plugin"

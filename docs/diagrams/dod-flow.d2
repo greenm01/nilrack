@@ -1,0 +1,92 @@
+direction: right
+
+title: "data-oriented flow: Model → Plan → Callback" {
+  shape: text
+  style.font-size: 26
+  style.bold: true
+}
+
+model: NilrackModel {
+  style.fill: "#cfd9ff"
+  style.bold: true
+  direction: down
+
+  tables: "dense tables" {
+    style.fill: "#dbe6ff"
+    racks
+    nodes
+    cables
+    ports
+    params
+    plugins
+    channelMaps
+    pluginUis
+  }
+  indexes: indexes {
+    style.fill: "#dbe6ff"
+    nodesByRack
+    cablesByRack
+    portsByNode
+    pluginByNode
+  }
+  rule: "typed logical IDs · ID 0 = null · mutate via entity ops" {
+    shape: text
+    style.italic: true
+    style.font-size: 13
+  }
+}
+
+compile: "graph_compile (UI thread)" {
+  style.fill: "#dbe6ff"
+  direction: down
+  s1: "1. validate · reject cycles"
+  s2: "2. expand buses → channel edges"
+  s3: "3. topo-sort nodes"
+  s4: "4. assign buffer slots"
+  s5: "5. emit ops (clear · copy · add · process · merge)"
+  s6: "6. build event-target lookup tables"
+  s1 -> s2 -> s3 -> s4 -> s5 -> s6
+}
+
+plan: "ProcessPlan (immutable)" {
+  style.fill: "#ffd6d6"
+  style.bold: true
+  direction: down
+  ordered: "ordered node list"
+  ops: "ops array"
+  bufs: "buffer bindings (plan-owned)"
+  queues: "event queues"
+  params: "parameter slots"
+  meters: "meter slots"
+  diag: "diagnostics slots"
+  latency: "latency metadata"
+}
+
+callback: "JACK callback (realtime)" {
+  style.fill: "#ffcccc"
+  direction: down
+
+  loop: "for op in plan.ops" {
+    style.fill: "#ffe0e0"
+    Clear
+    Copy
+    Add
+    Process: "Process → PluginRuntimeOps.process"
+    Merge
+  }
+  drain: "drain UI→audio events → validate against THIS plan → apply"
+  publish: "write meter snapshots · diagnostics · epoch tick"
+}
+
+out: "audio out + meter snapshots" {
+  shape: cylinder
+  style.fill: "#e0e0e0"
+}
+
+model -> compile: "dense tables read"
+compile -> plan: emit
+plan -> callback: "atomic ptr swap (epoch retire old)" {
+  style.stroke-dash: 3
+  style.bold: true
+}
+callback -> out

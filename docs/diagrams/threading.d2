@@ -1,0 +1,81 @@
+direction: right
+
+title: nilrack threading boundaries {
+  shape: text
+  style.font-size: 26
+  style.bold: true
+}
+
+ui: "UI thread" {
+  style.fill: "#eef3ff"
+  direction: down
+
+  allowed: Allowed {
+    style.fill: "#dbe6ff"
+    a1: "read · write NilrackModel"
+    a2: "TEA update + view"
+    a3: "compile ProcessPlan"
+    a4: "publish plan (atomic)"
+    a5: "Wayland dispatch"
+    a6: "Janet host (fuel-limited)"
+    a7: "session save / scan request"
+  }
+}
+
+audio: "Audio thread (JACK callback)" {
+  style.fill: "#ffe6e6"
+  direction: down
+
+  allowed: Allowed {
+    style.fill: "#ffd6d6"
+    b1: "read ProcessPlan"
+    b2: "drain UI→audio queues"
+    b3: "call plugin process ops"
+    b4: "write meter snapshots"
+    b5: "bump callback epoch"
+  }
+
+  forbidden: Forbidden {
+    style.fill: "#ffb3b3"
+    f1: allocation
+    f2: "locks · mutexes"
+    f3: "logging · file I/O"
+    f4: "model access"
+    f5: "UI / draw calls"
+  }
+}
+
+workers: "Workers (return data records)" {
+  style.fill: "#e8f5e8"
+  direction: down
+  scanner: "Plugin scanner (separate process)"
+  state: "State-save worker"
+  bridge: "XWayland bridge"
+  janet: "Janet runtime (UI guest)"
+}
+
+ui -> audio: ProcessPlan {
+  style.bold: true
+  style.stroke-dash: 3
+}
+ui -> audio: "ParamValue · MidiEvent (ring buffer)" {
+  style.stroke-dash: 3
+}
+audio -> ui: "MeterSnapshot (atomic store)" {
+  style.stroke-dash: 3
+}
+audio -> ui: "XRun records" {
+  style.stroke-dash: 3
+}
+audio -> ui: diagnostics {
+  style.stroke-dash: 3
+}
+
+ui -> workers: "scan / save / embed request"
+workers -> ui: "KDL result · save result · status"
+
+rule: "Once data crosses a thread or API boundary, treat it as immutable." {
+  shape: text
+  style.italic: true
+  style.font-size: 14
+}
