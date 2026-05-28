@@ -57,6 +57,7 @@ proc dispatchMsg*(
     committedActions: var ActionLog,
     effects: var EffectQueue,
     commands: var UpdateCommandQueue,
+    targets: InputTargetList,
     msg: Msg,
 ) =
   discard committedActions.recordCommittedAction(msg)
@@ -72,11 +73,16 @@ proc dispatchMsg*(
   of msgPointerButton:
     if not msg.btnPressed:
       return
-    let paramHit = model.paramSliderHitAt(msg.btnX, msg.btnY)
-    if paramHit.isSome:
-      let hit = paramHit.get
-      model.paramSetNormalized(hit.paramId, hit.normalizedValue.float64)
-      let param = model.paramData(hit.paramId)
+    let target = targets.targetAt(msg.btnX, msg.btnY)
+    if target.isSome and target.get.kind == itkParamSlider:
+      let paramId = target.get.paramId
+      let normalized =
+        if target.get.w <= 0.0'f32:
+          0.0'f32
+        else:
+          clamp01(((msg.btnX - target.get.x) / target.get.w).float64)
+      model.paramSetNormalized(paramId, normalized.float64)
+      let param = model.paramData(paramId)
       if param.isSome:
         let pluginId = model.pluginForNode(param.get.nodeId)
         if pluginId.isSome:
@@ -84,15 +90,13 @@ proc dispatchMsg*(
             UpdateCommand(
               kind: uckEnqueueParamValue,
               pluginId: pluginId.get,
-              paramId: hit.paramId,
-              normalizedValue: hit.normalizedValue.float64,
+              paramId: paramId,
+              normalizedValue: normalized.float64,
             )
           )
-    else:
-      let bypassNode = model.bypassToggleAt(msg.btnX, msg.btnY)
-      if bypassNode.isSome:
-        model.nodeToggleBypass(bypassNode.get)
-        discard effects.enqueueProcessPlanDirty(NullRackId)
-        discard commands.pushUpdateCommand(UpdateCommand(kind: uckPublishProcessPlan))
+    elif target.isSome and target.get.kind == itkNodeBypass:
+      model.nodeToggleBypass(target.get.nodeId)
+      discard effects.enqueueProcessPlanDirty(NullRackId)
+      discard commands.pushUpdateCommand(UpdateCommand(kind: uckPublishProcessPlan))
   else:
     discard

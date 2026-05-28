@@ -6,6 +6,7 @@ import types/model
 proc `==`*(a, b: RackId): bool {.borrow.}
 proc `==`*(a, b: NodeId): bool {.borrow.}
 proc `==`*(a, b: CableId): bool {.borrow.}
+proc `==`*(a, b: ChannelMapId): bool {.borrow.}
 proc `==`*(a, b: PortId): bool {.borrow.}
 proc `==`*(a, b: ParamId): bool {.borrow.}
 proc `==`*(a, b: PluginId): bool {.borrow.}
@@ -18,6 +19,7 @@ proc `==`*(a, b: InputTargetId): bool {.borrow.}
 proc `<`*(a, b: RackId): bool {.borrow.}
 proc `<`*(a, b: NodeId): bool {.borrow.}
 proc `<`*(a, b: CableId): bool {.borrow.}
+proc `<`*(a, b: ChannelMapId): bool {.borrow.}
 proc `<`*(a, b: PortId): bool {.borrow.}
 proc `<`*(a, b: ParamId): bool {.borrow.}
 proc `<`*(a, b: PluginId): bool {.borrow.}
@@ -30,6 +32,7 @@ proc `<`*(a, b: InputTargetId): bool {.borrow.}
 proc `$`*(id: RackId): string {.borrow.}
 proc `$`*(id: NodeId): string {.borrow.}
 proc `$`*(id: CableId): string {.borrow.}
+proc `$`*(id: ChannelMapId): string {.borrow.}
 proc `$`*(id: PortId): string {.borrow.}
 proc `$`*(id: ParamId): string {.borrow.}
 proc `$`*(id: PluginId): string {.borrow.}
@@ -46,6 +49,9 @@ proc hash*(id: NodeId): Hash =
   hash(uint32(id))
 
 proc hash*(id: CableId): Hash =
+  hash(uint32(id))
+
+proc hash*(id: ChannelMapId): Hash =
   hash(uint32(id))
 
 proc hash*(id: PortId): Hash =

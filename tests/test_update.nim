@@ -2,6 +2,7 @@ import std/[options, unittest]
 
 import ../src/state/engine
 import ../src/systems/effect_queue
+import ../src/systems/render_projection
 import ../src/systems/update
 import ../src/systems/param_mapping
 import ../src/systems/ui_geometry
@@ -12,9 +13,14 @@ suite "update dispatch":
     var actions: ActionLog
     var effects: EffectQueue
     var commands: UpdateCommandQueue
+    let targets = InputTargetList()
 
     model.dispatchMsg(
-      actions, effects, commands, Msg(kind: msgResize, resizeW: 800, resizeH: 600)
+      actions,
+      effects,
+      commands,
+      targets,
+      Msg(kind: msgResize, resizeW: 800, resizeH: 600),
     )
 
     var command: UpdateCommand
@@ -28,8 +34,11 @@ suite "update dispatch":
     var actions: ActionLog
     var effects: EffectQueue
     var commands: UpdateCommandQueue
+    let targets = InputTargetList()
 
-    model.dispatchMsg(actions, effects, commands, Msg(kind: msgKeyPress, keyCode: 1))
+    model.dispatchMsg(
+      actions, effects, commands, targets, Msg(kind: msgKeyPress, keyCode: 1)
+    )
 
     var command: UpdateCommand
     check commands.popUpdateCommand(command)
@@ -40,6 +49,8 @@ suite "update dispatch":
     var actions: ActionLog
     var effects: EffectQueue
     var commands: UpdateCommandQueue
+    var frame: NilDrawList
+    var targets: InputTargetList
     let rackId = model.rackCreate("rack")
     let nodeId = model.nodeCreate(rackId, nkPlugin, "plugin")
     model.nodeMove(nodeId, 40.0'f32, 50.0'f32)
@@ -50,11 +61,13 @@ suite "update dispatch":
     let paramId = model.paramCreate(nodeId, "Gain", 0.0, 1.0, 0.5)
     let node = model.nodeData(nodeId).get
     let rect = node.paramSliderRect(0)
+    frame.project(targets, model, 800.0'f32, 600.0'f32, 0.0'f32, 0.0'f32)
 
     model.dispatchMsg(
       actions,
       effects,
       commands,
+      targets,
       Msg(
         kind: msgPointerButton,
         btnButton: 1,
@@ -78,16 +91,20 @@ suite "update dispatch":
     var actions: ActionLog
     var effects: EffectQueue
     var commands: UpdateCommandQueue
+    var frame: NilDrawList
+    var targets: InputTargetList
     let rackId = model.rackCreate("rack")
     let nodeId = model.nodeCreate(rackId, nkPlugin, "plugin")
     model.nodeMove(nodeId, 40.0'f32, 50.0'f32)
     model.nodeResize(nodeId, 340.0'f32, 180.0'f32)
     let rect = model.nodeData(nodeId).get.pluginBypassToggleRect()
+    frame.project(targets, model, 800.0'f32, 600.0'f32, 0.0'f32, 0.0'f32)
 
     model.dispatchMsg(
       actions,
       effects,
       commands,
+      targets,
       Msg(
         kind: msgPointerButton,
         btnButton: 1,

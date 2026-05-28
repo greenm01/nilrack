@@ -1,6 +1,6 @@
 import std/options
 
-import ../types/[core, render_values]
+import ../types/[core, render_values, ui_values]
 import ../state/engine
 import ../render/draw_list
 import param_mapping
@@ -15,7 +15,32 @@ proc shortText(value: string, maxChars: int): string =
   else:
     value[0 ..< maxChars - 3] & "..."
 
-proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
+proc clearTargets(targets: var InputTargetList) =
+  targets.entries.setLen(0)
+
+proc addTarget(
+    targets: var InputTargetList,
+    kind: InputTargetKind,
+    nodeId: NodeId,
+    paramId: ParamId,
+    rect: Rect,
+) =
+  targets.entries.add(
+    InputTargetEntry(
+      id: InputTargetId(targets.entries.len.uint32 + 1'u32),
+      kind: kind,
+      nodeId: nodeId,
+      paramId: paramId,
+      x: rect.x,
+      y: rect.y,
+      w: rect.w,
+      h: rect.h,
+    )
+  )
+
+proc layoutPluginNodes(
+    list: var NilDrawList, targets: var InputTargetList, model: NilrackModel
+) =
   let panel = Color(r: 0.16, g: 0.17, b: 0.18, a: 1.0)
   let header = Color(r: 0.20, g: 0.22, b: 0.24, a: 1.0)
   let text = Color(r: 0.86, g: 0.89, b: 0.91, a: 1.0)
@@ -38,6 +63,7 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
     list.addTextRun(x + 12.0'f32, y + 8.0'f32, shortText(node.name, 28), text)
 
     let bypassRect = node.pluginBypassToggleRect()
+    targets.addTarget(itkNodeBypass, node.id, NullParamId, bypassRect)
     let bypassColor = if node.bypassed: bypassOn else: bypassOff
     list.addRect(bypassRect.x, bypassRect.y, bypassRect.w, bypassRect.h, bypassColor)
     list.addTextRun(bypassRect.x + 9.0'f32, y + 8.0'f32, "B", text)
@@ -86,6 +112,7 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
       list.addTextRun(x + 14.0'f32, rowY, shortText(label, 20), text)
       let sx = x + 170.0'f32
       let slider = node.paramSliderRect(visibleParam)
+      targets.addTarget(itkParamSlider, node.id, paramId, slider)
       let normalized = p.normalizedParamValue()
       list.addRect(slider.x, slider.y, slider.w, slider.h, sliderBg)
       list.addRect(slider.x, slider.y, slider.w * normalized, slider.h, sliderFill)
@@ -99,10 +126,12 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
 
 proc project*(
     list: var NilDrawList,
+    targets: var InputTargetList,
     model: NilrackModel,
     width, height: float32,
     meterIn, meterOut: float32,
 ) =
   list.clear()
+  targets.clearTargets()
   list.layoutShell(width, height, meterIn, meterOut)
-  list.layoutPluginNodes(model)
+  list.layoutPluginNodes(targets, model)

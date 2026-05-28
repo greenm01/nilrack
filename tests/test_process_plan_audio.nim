@@ -8,6 +8,7 @@ import ../src/plugins/plugin_adapter
 import ../src/state/engine
 import ../src/systems/graph_compile
 import ../src/systems/graph_process_plan
+import ../src/systems/plugin_lifecycle
 import ../src/types/[audio_values, core, plugin_runtime_values, plugin_values]
 
 proc localClapPath(): string =
@@ -205,14 +206,19 @@ suite "process plan audio":
       let loaded = loadClapPlugin(pluginPath)
       check loaded.ok
       if loaded.ok:
+        var model = NilrackModel()
+        var runtimes: PluginRuntimeStore
+        let attached = model.attachPluginDescriptor(loaded.descriptor)
+        let runtime = loaded.plugin.clapPluginRuntimeRef(attached.pluginId)
+        check runtimes.addPluginRuntime(runtime)
         check loaded.plugin.activateClap(48000.0, 1, 64)
         check loaded.plugin.startClapProcessing()
 
-        var plan = buildSingleClapProcessPlan(
-          NodeId(1), PluginId(1), loaded.descriptor, loaded.plugin
-        )
+        let compiled = model.compileRackGraph(attached.rackId, runtimes)
+        var plan = model.buildProcessPlanFromCompiledGraph(compiled.plan, runtimes)
+        check not compiled.hasCompileErrors
         check plan.nodeCount == 1
-        check plan.nodes[0] == NodeId(1)
+        check plan.nodes[0] == attached.nodeId
         check plan.entryCount == 1
         check plan.entries[0].ioMode == aimMonoLeftToStereo
 

@@ -1,4 +1,4 @@
-import std/[atomics, options, os]
+import std/[atomics, os]
 import state/engine
 import platform/wayland_app
 import render/renderer
@@ -6,10 +6,13 @@ import audio/backend_reconfiguration
 import audio/jack_backend
 import audio/param_event_queue
 import audio/process_callback
+import audio/process_plan_store
 import systems/effect_queue
+import systems/graph_compile
 import systems/plugin_scan
 import systems/render_projection
 import systems/graph_process_plan
+import systems/plugin_lifecycle
 import systems/update
 import plugins/[clap_host, plugin_adapter]
 import plugins/vst3_host
@@ -70,22 +73,37 @@ proc runScanPlugin(path: string) =
 
 proc publishSingleClapProcessPlan(
     jack: var JackBackend,
+    retireQueue: var ProcessPlanRetireQueue,
     model: NilrackModel,
-    activeAttach: PluginAttachResult,
-    activeDescriptor: PluginDescriptor,
-    activeClap: ClapLoadedPlugin,
-    processPlan: var ProcessPlan,
+    rackId: RackId,
+    runtimes: PluginRuntimeStore,
 ): bool =
-  if activeClap.isNil:
+  if rackId == NullRackId:
     return false
-  processPlan = buildSingleClapProcessPlan(
-    activeAttach.nodeId, activeAttach.pluginId, activeDescriptor, activeClap
-  )
-  let node = model.nodeData(activeAttach.nodeId)
-  if node.isSome:
-    processPlan.applyHostNodeState(node.get)
-  discard jack.publishJackProcessPlan(addr processPlan)
+  let report = model.compileRackGraph(rackId, runtimes)
+  if report.hasCompileErrors:
+    return false
+  let plan = model.buildProcessPlanFromCompiledGraph(report.plan, runtimes)
+  let published = cast[ptr ProcessPlan](alloc0(sizeof(ProcessPlan)))
+  published[] = plan
+  let retired = jack.publishJackProcessPlan(published)
+  if not retireQueue.enqueueRetiredProcessPlan(jack.planSlot, retired):
+    discard
   true
+
+proc drainRetiredProcessPlans(
+    retireQueue: var ProcessPlanRetireQueue, slot: var ProcessPlanSlot
+) =
+  var retired = retireQueue.popReadyRetiredProcessPlan(slot)
+  while not retired.isNil:
+    dealloc(retired)
+    retired = retireQueue.popReadyRetiredProcessPlan(slot)
+
+proc drainRetiredProcessPlansImmediate(retireQueue: var ProcessPlanRetireQueue) =
+  var retired = retireQueue.popRetiredProcessPlanImmediate()
+  while not retired.isNil:
+    dealloc(retired)
+    retired = retireQueue.popRetiredProcessPlanImmediate()
 
 when isMainModule:
   let args = parseArgs()
@@ -93,8 +111,8 @@ when isMainModule:
     runScanPlugin(args.scanPluginPath)
 
   var activeClap: ClapLoadedPlugin
-  var activeDescriptor: PluginDescriptor
   var activeAttach: PluginAttachResult
+  var runtimeStore: PluginRuntimeStore
   var model = NilrackModel()
   if args.clapPath.len > 0:
     let clap = loadClapPlugin(args.clapPath)
@@ -102,9 +120,11 @@ when isMainModule:
       stderr.writeLine("nilrack: " & clap.error)
       quit(1)
     activeClap = clap.plugin
-    activeDescriptor = clap.descriptor
-    activeAttach = model.attachPluginDescriptor(activeDescriptor)
+    activeAttach = model.attachPluginDescriptor(clap.descriptor)
     activeClap.bindClapPluginId(activeAttach.pluginId)
+    discard runtimeStore.addPluginRuntime(
+      activeClap.clapPluginRuntimeRef(activeAttach.pluginId)
+    )
 
   var app: WaylandApp
   initWaylandApp(app)
@@ -121,7 +141,8 @@ when isMainModule:
   var jack: JackBackend
   initJackBackend(jack, "nilrack")
 
-  var processPlan: ProcessPlan
+  var retiredPlans: ProcessPlanRetireQueue
+  retiredPlans.initProcessPlanRetireQueue()
   var lastBackendReconfigGeneration: uint32
   if not activeClap.isNil:
     if not activeClap.activateClap(jack.sampleRate.float64, 1, jack.bufferSize):
@@ -131,7 +152,7 @@ when isMainModule:
       stderr.writeLine("nilrack: failed to start CLAP processing")
       quit(1)
     discard jack.publishSingleClapProcessPlan(
-      model, activeAttach, activeDescriptor, activeClap, processPlan
+      retiredPlans, model, activeAttach.rackId, runtimeStore
     )
 
   activateJack(jack)
@@ -141,9 +162,11 @@ when isMainModule:
     discard nilampUi.initNilampVst3Ui(app)
 
   var frame: NilDrawList
+  var inputTargets: InputTargetList
   var committedActions: ActionLog
   var effects: EffectQueue
   var updateCommands: UpdateCommandQueue
+  frame.project(inputTargets, model, app.width.float32, app.height.float32, 0.0, 0.0)
 
   while app.running:
     discard app.pollAndDispatch()
@@ -151,7 +174,7 @@ when isMainModule:
       nilampUi.pumpNilampVst3Ui()
     let msgs = app.drainMsgs()
     for msg in msgs:
-      model.dispatchMsg(committedActions, effects, updateCommands, msg)
+      model.dispatchMsg(committedActions, effects, updateCommands, inputTargets, msg)
     var command: UpdateCommand
     while updateCommands.popUpdateCommand(command):
       case command.kind
@@ -167,7 +190,7 @@ when isMainModule:
         )
       of uckPublishProcessPlan:
         discard jack.publishSingleClapProcessPlan(
-          model, activeAttach, activeDescriptor, activeClap, processPlan
+          retiredPlans, model, activeAttach.rackId, runtimeStore
         )
     var effect: Effect
     while effects.popEffect(effect):
@@ -179,15 +202,14 @@ when isMainModule:
     if jack.consumeAudioReconfigurationRequest(
       lastBackendReconfigGeneration, retiredPlan
     ):
-      # The smoke path reuses stack-owned plan storage; heap plans enqueue retiredPlan.
-      discard retiredPlan
+      discard retiredPlans.enqueueRetiredProcessPlan(jack.planSlot, retiredPlan)
       if not activeClap.isNil:
         activeClap.stopClapProcessing()
         activeClap.deactivateClap()
         if activeClap.activateClap(jack.sampleRate.float64, 1, jack.bufferSize) and
             activeClap.startClapProcessing():
           discard jack.publishSingleClapProcessPlan(
-            model, activeAttach, activeDescriptor, activeClap, processPlan
+            retiredPlans, model, activeAttach.rackId, runtimeStore
           )
         else:
           stderr.writeLine(
@@ -195,10 +217,15 @@ when isMainModule:
           )
     let mIn = meterLevels[0].load(moRelaxed)
     let mOut = meterLevels[1].load(moRelaxed)
-    frame.project(model, app.width.float32, app.height.float32, mIn, mOut)
+    retiredPlans.drainRetiredProcessPlans(jack.planSlot)
+    frame.project(inputTargets, model, app.width.float32, app.height.float32, mIn, mOut)
     r.renderFrame(frame)
 
   deactivateJack(jack)
+  discard retiredPlans.enqueueRetiredProcessPlan(
+    jack.planSlot, jack.publishJackProcessPlan(nil)
+  )
+  retiredPlans.drainRetiredProcessPlansImmediate()
   shutdownJackBackend(jack)
   if not activeClap.isNil:
     activeClap.stopClapProcessing()

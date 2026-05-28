@@ -4,6 +4,7 @@ type
   RackId* = distinct uint32
   NodeId* = distinct uint32
   CableId* = distinct uint32
+  ChannelMapId* = distinct uint32
   PortId* = distinct uint32
   ParamId* = distinct uint32
   PluginId* = distinct uint32
@@ -34,6 +35,7 @@ type
     nextRackId*: uint32
     nextNodeId*: uint32
     nextCableId*: uint32
+    nextChannelMapId*: uint32
     nextPortId*: uint32
     nextParamId*: uint32
     nextPluginId*: uint32
@@ -47,6 +49,7 @@ const
   NullRackId* = RackId(0)
   NullNodeId* = NodeId(0)
   NullCableId* = CableId(0)
+  NullChannelMapId* = ChannelMapId(0)
   NullPortId* = PortId(0)
   NullParamId* = ParamId(0)
   NullPluginId* = PluginId(0)

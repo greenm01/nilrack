@@ -1,10 +1,9 @@
 import std/options
 
-import ../plugins/clap_host
 import ../plugins/plugin_runtime_api
 import ../key_ops
 import ../state/[iterators, model, queries]
-import ../types/[audio_values, core, plugin_values]
+import ../types/[audio_values, core]
 import ../types/plugin_runtime_values
 
 proc addPlanNode*(plan: var ProcessPlan, nodeId: NodeId): bool =
@@ -88,26 +87,6 @@ proc addEventPortTarget*(plan: var ProcessPlan, portId: PortId): bool =
   inc plan.eventPortTargetCount
   true
 
-proc mainAudioPort(
-    descriptor: PluginDescriptor, direction: PortDirection
-): PluginPortDescriptor =
-  for port in descriptor.ports:
-    if port.kind == pkAudio and port.direction == direction and port.isMain:
-      return port
-  for port in descriptor.ports:
-    if port.kind == pkAudio and port.direction == direction:
-      return port
-  PluginPortDescriptor()
-
-proc audioIoModeFor*(descriptor: PluginDescriptor): AudioIoMode =
-  let input = mainAudioPort(descriptor, pdIn)
-  let output = mainAudioPort(descriptor, pdOut)
-  if input.channelCount == 1 and output.channelCount == 1:
-    return aimMonoLeftToStereo
-  if input.channelCount == 2 and output.channelCount == 2:
-    return aimStereo
-  aimBypass
-
 proc mainAudioPortForNode(
     m: NilrackModel, nodeId: NodeId, direction: PortDirection
 ): PortData =
@@ -164,23 +143,3 @@ proc buildProcessPlanFromCompiledGraph*(
         active: mode != aimBypass and not node.get.bypassed and not node.get.muted,
       )
     )
-
-proc buildSingleClapProcessPlan*(
-    nodeId: NodeId,
-    pluginId: PluginId,
-    descriptor: PluginDescriptor,
-    loaded: ClapLoadedPlugin,
-): ProcessPlan =
-  discard result.addPlanNode(nodeId)
-  let mode = audioIoModeFor(descriptor)
-  let runtime = loaded.clapPluginRuntimeRef(pluginId)
-  discard result.addProcessEntry(
-    AudioProcessEntry(
-      nodeId: nodeId,
-      pluginId: pluginId,
-      runtime: loaded.clapRuntimePointer(),
-      ops: runtime.ops,
-      ioMode: mode,
-      active: mode != aimBypass,
-    )
-  )

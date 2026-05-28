@@ -20,6 +20,10 @@ iterator cablesInRack*(m: NilrackModel, id: RackId): CableId =
   for cableId in m.cablesByRack.getOrDefault(id, @[]):
     yield cableId
 
+iterator channelMapsInRack*(m: NilrackModel, id: RackId): ChannelMapId =
+  for channelMapId in m.channelMapsByRack.getOrDefault(id, @[]):
+    yield channelMapId
+
 iterator audioPortsForNode*(m: NilrackModel, id: NodeId): PortId =
   for portId in m.portsByNode.getOrDefault(id, @[]):
     let p = m.ports.entity(portId)

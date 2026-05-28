@@ -25,3 +25,10 @@ suite "data code boundary":
         checkpoint path & ":" & $(lineNumber + 1) & " must not contain proc types"
         check not line.lineHasProcType()
     check checkedFiles > 0
+
+  test "graph process plan stays adapter-neutral":
+    let source = readFile("src/systems/graph_process_plan.nim")
+
+    check not source.contains("clap_host")
+    check not source.contains("ClapLoadedPlugin")
+    check not source.contains("buildSingleClapProcessPlan")

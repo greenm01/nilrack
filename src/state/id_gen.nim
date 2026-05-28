@@ -17,6 +17,9 @@ proc generateNodeId*(counters: var IdCounters): NodeId =
 proc generateCableId*(counters: var IdCounters): CableId =
   CableId(nextRaw(counters.nextCableId))
 
+proc generateChannelMapId*(counters: var IdCounters): ChannelMapId =
+  ChannelMapId(nextRaw(counters.nextChannelMapId))
+
 proc generatePortId*(counters: var IdCounters): PortId =
   PortId(nextRaw(counters.nextPortId))
 

@@ -1,4 +1,5 @@
 import core
+import model
 import diagnostic_values
 
 const MaxActionLogEntries* = 256
@@ -6,6 +7,9 @@ const MaxActionLogEntries* = 256
 type
   InputTargetEntry* = object
     id*: InputTargetId
+    kind*: InputTargetKind
+    nodeId*: NodeId
+    paramId*: ParamId
     x*, y*, w*, h*: float32
 
   InputTargetList* = object

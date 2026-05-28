@@ -54,6 +54,17 @@ type
     dstPort*: PortId
     kind*: PortKind
     routePolicy*: CableRoutePolicy
+    channelMapId*: ChannelMapId
+
+  ChannelMapEntry* = object
+    srcChannel*: uint32
+    dstChannel*: uint32
+    gain*: float32
+
+  ChannelMapData* = object
+    id*: ChannelMapId
+    rackId*: RackId
+    entries*: seq[ChannelMapEntry]
 
   PortData* = object
     id*: PortId
@@ -101,6 +112,11 @@ type
     id*: PluginUiId
     pluginId*: PluginId
 
+  InputTargetKind* = enum
+    itkNone
+    itkNodeBypass
+    itkParamSlider
+
   RenderSurfaceData* = object
     id*: RenderSurfaceId
 
@@ -110,7 +126,9 @@ type
 
   InputTargetData* = object
     id*: InputTargetId
+    kind*: InputTargetKind
     nodeId*: NodeId
+    paramId*: ParamId
     x*, y*, w*, h*: float32
 
   ExternalPortKey* = object

@@ -30,3 +30,10 @@ proc cableSetRoutePolicy*(
 ) =
   if m.cables.contains(id):
     m.cables.mEntity(id).routePolicy = routePolicy
+
+proc cableSetChannelMap*(m: var NilrackModel, id: CableId, channelMapId: ChannelMapId) =
+  if not m.cables.contains(id):
+    return
+  m.cables.mEntity(id).channelMapId = channelMapId
+  m.cables.mEntity(id).routePolicy =
+    if channelMapId == NullChannelMapId: crAuto else: crChannelMap

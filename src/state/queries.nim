@@ -12,6 +12,9 @@ proc nodeData*(m: NilrackModel, id: NodeId): Option[NodeData] =
 proc cableData*(m: NilrackModel, id: CableId): Option[CableData] =
   m.cables.entity(id)
 
+proc channelMapData*(m: NilrackModel, id: ChannelMapId): Option[ChannelMapData] =
+  m.channelMaps.entity(id)
+
 proc portData*(m: NilrackModel, id: PortId): Option[PortData] =
   m.ports.entity(id)
 
