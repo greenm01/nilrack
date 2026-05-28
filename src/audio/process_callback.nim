@@ -28,7 +28,8 @@ proc jackProcess*(nframes: uint32, arg: pointer): cint {.cdecl.} =
   let out2 = cast[ptr UncheckedArray[float32]](jackPortGetBuffer(
     cast[ptr JackPort](b.outPort2), nframes
   ))
-  discard processAudioBlock(b.processPlan, in1, in2, out1, out2, nframes)
+  let plan = b.planSlot.loadProcessPlan()
+  discard processAudioBlock(plan, in1, in2, out1, out2, nframes)
   var inPeak, outPeak = 0.0'f32
   for i in 0 ..< nframes.int:
     let inA1 = abs(in1[i])
@@ -45,4 +46,5 @@ proc jackProcess*(nframes: uint32, arg: pointer): cint {.cdecl.} =
       outPeak = outA2
   meterLevels[0].store(inPeak, moRelaxed)
   meterLevels[1].store(outPeak, moRelaxed)
+  discard b.planSlot.advanceCallbackEpoch()
   0

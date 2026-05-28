@@ -30,6 +30,10 @@ type
     entries*: array[MaxProcessPlanEntries, AudioProcessEntry]
     capacityExceeded*: bool
 
+  ProcessPlanSlot* = object
+    current*: Atomic[pointer]
+    callbackEpoch*: Atomic[uint64]
+
   JackClientHandle* = distinct pointer
   JackPortHandle* = distinct pointer
 
@@ -41,7 +45,7 @@ type
     outPort2*: JackPortHandle
     sampleRate*: uint32
     bufferSize*: uint32
-    processPlan*: ptr ProcessPlan
+    planSlot*: ProcessPlanSlot
 
   MeterSnapshot* = object
     levels*: array[4, float32]
@@ -66,3 +70,24 @@ proc addProcessEntry*(plan: var ProcessPlan, entry: AudioProcessEntry): bool =
   plan.entries[plan.entryCount.int] = entry
   inc plan.entryCount
   true
+
+proc initProcessPlanSlot*(slot: var ProcessPlanSlot) =
+  slot.current.store(nil, moRelaxed)
+  slot.callbackEpoch.store(0'u64, moRelaxed)
+
+proc loadProcessPlan*(slot: var ProcessPlanSlot): ptr ProcessPlan =
+  cast[ptr ProcessPlan](slot.current.load(moAcquire))
+
+proc publishProcessPlan*(
+    slot: var ProcessPlanSlot, plan: ptr ProcessPlan
+): ptr ProcessPlan =
+  cast[ptr ProcessPlan](slot.current.exchange(cast[pointer](plan), moAcquireRelease))
+
+proc clearProcessPlan*(slot: var ProcessPlanSlot): ptr ProcessPlan =
+  slot.publishProcessPlan(nil)
+
+proc advanceCallbackEpoch*(slot: var ProcessPlanSlot): uint64 =
+  slot.callbackEpoch.fetchAdd(1'u64, moRelease) + 1'u64
+
+proc loadCallbackEpoch*(slot: var ProcessPlanSlot): uint64 =
+  slot.callbackEpoch.load(moAcquire)

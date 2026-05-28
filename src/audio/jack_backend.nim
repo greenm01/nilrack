@@ -60,6 +60,7 @@ proc initJackBackend*(b: var JackBackend, clientName: string) =
   b.client = cast[JackClientHandle](client)
   b.sampleRate = jackGetSampleRate(client)
   b.bufferSize = jackGetBufferSize(client)
+  b.planSlot.initProcessPlanSlot()
 
   b.inPort1 = cast[JackPortHandle](jackPortRegister(
     client, "input_1", jackDefaultAudioType, jackPortIsInput, 0
@@ -80,8 +81,10 @@ proc activateJack*(b: var JackBackend) =
   let client = cast[ptr JackClient](b.client)
   doAssert jackActivate(client) == 0, "failed to activate JACK client"
 
-proc setJackProcessPlan*(b: var JackBackend, plan: ptr ProcessPlan) =
-  b.processPlan = plan
+proc publishJackProcessPlan*(
+    b: var JackBackend, plan: ptr ProcessPlan
+): ptr ProcessPlan =
+  b.planSlot.publishProcessPlan(plan)
 
 proc deactivateJack*(b: var JackBackend) =
   if pointer(b.client) != nil:

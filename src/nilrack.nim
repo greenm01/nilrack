@@ -84,7 +84,7 @@ when isMainModule:
     processPlan = buildSingleClapProcessPlan(
       activeAttach.nodeId, activeAttach.pluginId, activeDescriptor, activeClap
     )
-    jack.setJackProcessPlan(addr processPlan)
+    discard jack.publishJackProcessPlan(addr processPlan)
 
   activateJack(jack)
 
