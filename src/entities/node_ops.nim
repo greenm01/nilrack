@@ -32,3 +32,11 @@ proc nodeMove*(m: var NilrackModel, id: NodeId, x, y: float32) =
   if m.nodes.contains(id):
     m.nodes.mEntity(id).x = x
     m.nodes.mEntity(id).y = y
+
+proc nodeSetBypassed*(m: var NilrackModel, id: NodeId, bypassed: bool) =
+  if m.nodes.contains(id):
+    m.nodes.mEntity(id).bypassed = bypassed
+
+proc nodeToggleBypass*(m: var NilrackModel, id: NodeId) =
+  if m.nodes.contains(id):
+    m.nodes.mEntity(id).bypassed = not m.nodes.mEntity(id).bypassed

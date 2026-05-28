@@ -1,4 +1,4 @@
-import std/[atomics, os]
+import std/[atomics, options, os]
 import state/engine
 import platform/wayland_app
 import render/renderer
@@ -9,6 +9,7 @@ import systems/action_log
 import systems/effect_queue
 import systems/render_projection
 import systems/graph_process_plan
+import systems/ui_hit_test
 import plugins/[clap_host, plugin_adapter]
 import plugins/vst3_host
 
@@ -117,6 +118,11 @@ when isMainModule:
       of msgKeyPress:
         if msg.keyCode == 1:
           app.running = false
+      of msgPointerButton:
+        if msg.btnPressed:
+          let bypassNode = model.bypassToggleAt(msg.btnX, msg.btnY)
+          if bypassNode.isSome:
+            model.nodeToggleBypass(bypassNode.get)
       else:
         discard
     var effect: Effect

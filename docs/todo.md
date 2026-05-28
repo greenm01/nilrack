@@ -132,7 +132,7 @@ CLAP workflow on top of that foundation.
 - [x] `src/systems/graph_process_plan.nim`: build process plan from compiled
   graph, not only the single-plugin helper
 - [x] Plugin node in rack UI: title bar and port slots
-- [ ] Plugin node in rack UI: bypass toggle
+- [x] Plugin node in rack UI: bypass toggle
 - [x] Generated parameter controls: display-only slider rows
 - [ ] Generated parameter controls: editable knob and slider widgets
 - [ ] `src/systems/param_mapping.nim`: normalized param value → draw + input target

@@ -3,6 +3,7 @@ import std/[math, options]
 import ../types/[core, render_values]
 import ../state/engine
 import ../render/draw_list
+import ui_hit_test
 import ui_layout
 
 proc clamp01(value: float64): float32 =
@@ -32,6 +33,8 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
   let portColor = Color(r: 0.28, g: 0.47, b: 0.62, a: 1.0)
   let sliderBg = Color(r: 0.09, g: 0.10, b: 0.11, a: 1.0)
   let sliderFill = Color(r: 0.42, g: 0.68, b: 0.38, a: 1.0)
+  let bypassOff = Color(r: 0.25, g: 0.29, b: 0.31, a: 1.0)
+  let bypassOn = Color(r: 0.62, g: 0.30, b: 0.26, a: 1.0)
 
   for node in model.nodes.data:
     if node.kind != nkPlugin:
@@ -46,12 +49,17 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
     list.addRect(x, y, w, 30.0'f32, header)
     list.addTextRun(x + 12.0'f32, y + 8.0'f32, shortText(node.name, 28), text)
 
+    let bypassRect = node.pluginBypassToggleRect()
+    let bypassColor = if node.bypassed: bypassOn else: bypassOff
+    list.addRect(bypassRect.x, bypassRect.y, bypassRect.w, bypassRect.h, bypassColor)
+    list.addTextRun(bypassRect.x + 9.0'f32, y + 8.0'f32, "B", text)
+
     let pluginId = model.pluginForNode(node.id)
     if pluginId.isSome:
       let plugin = model.plugins.entity(pluginId.get)
       if plugin.isSome and plugin.get.version.len > 0:
         list.addTextRun(
-          x + w - 74.0'f32, y + 8.0'f32, shortText(plugin.get.version, 10), mutedText
+          x + w - 116.0'f32, y + 8.0'f32, shortText(plugin.get.version, 10), mutedText
         )
 
     for portId in model.portsForNode(node.id):
