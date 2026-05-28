@@ -58,6 +58,10 @@ proc writeScanHelper(path, output: string) =
   )
   setFilePermissions(path, {fpUserRead, fpUserWrite, fpUserExec})
 
+proc writeFailingScanHelper(path: string, exitCode: int) =
+  writeFile(path, "#!/bin/sh\necho scanner failed\nexit " & $exitCode & "\n")
+  setFilePermissions(path, {fpUserRead, fpUserWrite, fpUserExec})
+
 suite "plugin scan":
   test "formats plugin descriptor scan result as KDL":
     let descriptor = exampleDescriptor("/tmp/example.clap")
@@ -329,6 +333,126 @@ suite "plugin scan":
     let result = scanPluginWithCache(helperPath, pluginPath, cachePath, 1000)
     check result.ok
     check loadScanCache(cachePath).findCachedScanNode(pluginPath, mtime).isSome
+
+  test "forced rescan replaces failed cache entry with ok result":
+    let dir = scanTestDir("rescan-failed-ok")
+    defer:
+      removeDir(dir)
+    let cachePath = dir / "scan-cache.kdl"
+    let pluginPath = dir / "plugin.clap"
+    writeFile(pluginPath, "plugin")
+    let mtime = pluginMtime(pluginPath)
+    var cache = scanFailedEntryToKdlDoc(
+      PluginScanFailedEntry(
+        path: pluginPath,
+        mtime: mtime,
+        reason: psfrNonZeroExit,
+        exitCode: 2,
+        timedOut: false,
+        error: "scanner exited non-zero",
+      )
+    )
+    check saveScanCache(cachePath, cache)
+    let helperPath = dir / "scan-helper"
+    writeScanHelper(
+      helperPath, scanDescriptorToKdl(exampleDescriptor(pluginPath), mtime)
+    )
+
+    let result = rescanPluginWithCache(helperPath, pluginPath, cachePath, 1000)
+    check result.ok
+
+    let loaded = loadScanCache(cachePath)
+    let cached = loaded.findCachedScanNode(pluginPath, mtime)
+    check cached.isSome
+    check cached.get.props["status"].get(string) == "ok"
+
+  test "forced rescan replaces ok cache entry with failed result":
+    let dir = scanTestDir("rescan-ok-failed")
+    defer:
+      removeDir(dir)
+    let cachePath = dir / "scan-cache.kdl"
+    let pluginPath = dir / "plugin.clap"
+    writeFile(pluginPath, "plugin")
+    let mtime = pluginMtime(pluginPath)
+    var cache = scanDescriptorToKdlDoc(exampleDescriptor(pluginPath), mtime)
+    check saveScanCache(cachePath, cache)
+    let helperPath = dir / "scan-helper"
+    writeFailingScanHelper(helperPath, 3)
+
+    let result = rescanPluginWithCache(helperPath, pluginPath, cachePath, 1000)
+    check not result.ok
+    check result.reason == psfrNonZeroExit
+
+    let loaded = loadScanCache(cachePath)
+    let cached = loaded.findCachedScanNode(pluginPath, mtime)
+    check cached.isSome
+    check cached.get.props["status"].get(string) == "failed"
+    check parseScanFailedEntry(cached.get).get.exitCode == 3
+
+  test "forced rescan runs helper despite matching cache hit":
+    let dir = scanTestDir("rescan-bypasses-hit")
+    defer:
+      removeDir(dir)
+    let cachePath = dir / "scan-cache.kdl"
+    let pluginPath = dir / "plugin.clap"
+    writeFile(pluginPath, "plugin")
+    let mtime = pluginMtime(pluginPath)
+    var cache = scanFailedEntryToKdlDoc(
+      PluginScanFailedEntry(
+        path: pluginPath,
+        mtime: mtime,
+        reason: psfrTimeout,
+        exitCode: -1,
+        timedOut: true,
+        error: "scanner timed out",
+      )
+    )
+    check saveScanCache(cachePath, cache)
+    let helperPath = dir / "scan-helper"
+    writeScanHelper(
+      helperPath, scanDescriptorToKdl(exampleDescriptor(pluginPath), mtime)
+    )
+
+    let result = rescanPluginWithCache(helperPath, pluginPath, cachePath, 1000)
+    check result.ok
+    check parseKdl(result.output)[0].props["status"].get(string) == "ok"
+
+  test "forced rescan preserves unrelated cache entries":
+    let dir = scanTestDir("rescan-preserves-other")
+    defer:
+      removeDir(dir)
+    let cachePath = dir / "scan-cache.kdl"
+    let pluginPath = dir / "plugin.clap"
+    let otherPath = dir / "other.clap"
+    writeFile(pluginPath, "plugin")
+    writeFile(otherPath, "other")
+    let mtime = pluginMtime(pluginPath)
+    let otherMtime = pluginMtime(otherPath)
+    var cache: KdlDoc =
+      @[
+        scanFailedEntryToKdlDoc(
+          PluginScanFailedEntry(
+            path: pluginPath,
+            mtime: mtime,
+            reason: psfrTimeout,
+            exitCode: -1,
+            timedOut: true,
+            error: "scanner timed out",
+          )
+        )[0],
+        scanDescriptorToKdlDoc(exampleDescriptor(otherPath), otherMtime)[0],
+      ]
+    check saveScanCache(cachePath, cache)
+    let helperPath = dir / "scan-helper"
+    writeScanHelper(
+      helperPath, scanDescriptorToKdl(exampleDescriptor(pluginPath), mtime)
+    )
+
+    check rescanPluginWithCache(helperPath, pluginPath, cachePath, 1000).ok
+
+    let loaded = loadScanCache(cachePath)
+    check loaded.findCachedScanNode(pluginPath, mtime).isSome
+    check loaded.findCachedScanNode(otherPath, otherMtime).isSome
 
   test "scanner process runner accepts valid KDL output":
     let printfExe = findExe("printf")

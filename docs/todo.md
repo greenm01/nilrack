@@ -186,7 +186,7 @@ results. Show available plugins in a browser. See [plugins.md](plugins.md).
 - [x] `ScanFailed` cache entries for timeout, non-zero exit, empty output, and
   malformed KDL
 - [x] Disk cache: temp-write, fsync, rename via `nimkdl`, skip unchanged plugins
-- [ ] User-triggered rescan replaces a failed cache entry for the same path
+- [x] User-triggered rescan replaces a failed cache entry for the same path
 - [ ] Plugin browser UI: list scanned plugins, filter by format and name
 - [ ] Drag plugin from browser to rack canvas → nodeCreate + pluginAttachToNode
 

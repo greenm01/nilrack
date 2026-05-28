@@ -445,6 +445,31 @@ proc scanPluginWithHelper*(
 ): PluginScanProcessResult =
   runPluginScannerProcess(scannerExe, ["--scan-plugin", pluginPath], timeoutMs)
 
+proc updateScanCacheFromResult(
+    cachePath: string,
+    cache: var KdlDoc,
+    pluginPath: string,
+    mtime: int64,
+    scanResult: PluginScanProcessResult,
+) =
+  if scanResult.ok:
+    try:
+      let doc = parseKdl(scanResult.output)
+      for node in doc:
+        if node.scanNodeMatches(pluginPath, mtime):
+          cache.upsertScanCacheNode(node)
+          discard saveScanCache(cachePath, cache)
+          return
+    except CatchableError:
+      discard
+  else:
+    cache.upsertScanCacheNode(
+      scanFailedEntryToKdlDoc(failedEntryFromScanResult(pluginPath, mtime, scanResult))[
+        0
+      ]
+    )
+    discard saveScanCache(cachePath, cache)
+
 proc scanPluginWithCache*(
     scannerExe, pluginPath, cachePath: string, timeoutMs: int = PluginScanTimeoutMs
 ): PluginScanProcessResult =
@@ -458,18 +483,12 @@ proc scanPluginWithCache*(
       return cachedResult.get
 
   result = scanPluginWithHelper(scannerExe, pluginPath, timeoutMs)
-  if result.ok:
-    try:
-      let doc = parseKdl(result.output)
-      for node in doc:
-        if node.scanNodeMatches(pluginPath, mtime):
-          cache.upsertScanCacheNode(node)
-          discard saveScanCache(cachePath, cache)
-          return result
-    except CatchableError:
-      discard
-  else:
-    cache.upsertScanCacheNode(
-      scanFailedEntryToKdlDoc(failedEntryFromScanResult(pluginPath, mtime, result))[0]
-    )
-    discard saveScanCache(cachePath, cache)
+  updateScanCacheFromResult(cachePath, cache, pluginPath, mtime, result)
+
+proc rescanPluginWithCache*(
+    scannerExe, pluginPath, cachePath: string, timeoutMs: int = PluginScanTimeoutMs
+): PluginScanProcessResult =
+  let mtime = pluginMtime(pluginPath)
+  var cache = loadScanCache(cachePath)
+  result = scanPluginWithHelper(scannerExe, pluginPath, timeoutMs)
+  updateScanCacheFromResult(cachePath, cache, pluginPath, mtime, result)
