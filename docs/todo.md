@@ -165,7 +165,7 @@ general plugin host.
 Scan CLAP, LV2, and VST3 directories without risking the host process. Cache
 results. Show available plugins in a browser. See [plugins.md](plugins.md).
 
-- [ ] `--scan-plugin <path>` mode in `nilrack.nim`: load plugin, write KDL to
+- [x] `--scan-plugin <path>` mode in `nilrack.nim`: load plugin, write KDL to
   stdout, exit
 - [ ] `src/systems/plugin_scan.nim`: fork scanner helper, collect KDL output,
   enforce timeout, and collect exit status

@@ -9,6 +9,7 @@ import audio/process_callback
 import systems/action_log
 import systems/effect_queue
 import systems/param_mapping
+import systems/plugin_scan
 import systems/render_projection
 import systems/graph_process_plan
 import systems/ui_hit_test
@@ -17,10 +18,13 @@ import plugins/vst3_host
 
 type AppArgs = object
   clapPath: string
+  scanPluginPath: string
   vst3UiSpike: bool
 
 proc printUsage() =
-  stderr.writeLine("usage: nilrack [--clap <path>] [--vst3-ui-spike]")
+  stderr.writeLine(
+    "usage: nilrack [--clap <path>] [--vst3-ui-spike] [--scan-plugin <path>]"
+  )
 
 proc parseArgs(): AppArgs =
   var i = 1
@@ -33,6 +37,12 @@ proc parseArgs(): AppArgs =
         printUsage()
         quit(1)
       result.clapPath = paramStr(i)
+    of "--scan-plugin":
+      inc i
+      if i > paramCount():
+        printUsage()
+        quit(1)
+      result.scanPluginPath = paramStr(i)
     of "--vst3-ui-spike":
       result.vst3UiSpike = true
     of "--help", "-h":
@@ -47,6 +57,18 @@ proc parseArgs(): AppArgs =
   if result.clapPath.len > 0 and result.vst3UiSpike:
     stderr.writeLine("nilrack: --clap and --vst3-ui-spike are separate smoke paths")
     quit(1)
+  if result.scanPluginPath.len > 0 and (result.clapPath.len > 0 or result.vst3UiSpike):
+    stderr.writeLine("nilrack: --scan-plugin cannot be combined with live host modes")
+    quit(1)
+
+proc runScanPlugin(path: string) =
+  let clap = loadClapPlugin(path)
+  if not clap.ok:
+    stderr.writeLine("nilrack: " & clap.error)
+    quit(1)
+  stdout.write(clap.descriptor.scanDescriptorToKdl(pluginMtime(path)))
+  clap.plugin.close()
+  quit(0)
 
 proc publishSingleClapProcessPlan(
     jack: var JackBackend,
@@ -69,6 +91,8 @@ proc publishSingleClapProcessPlan(
 
 when isMainModule:
   let args = parseArgs()
+  if args.scanPluginPath.len > 0:
+    runScanPlugin(args.scanPluginPath)
 
   var activeClap: ClapLoadedPlugin
   var activeDescriptor: PluginDescriptor
