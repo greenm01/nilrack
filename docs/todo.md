@@ -88,7 +88,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
 - [x] UI-to-audio param event queue: fixed capacity, target validation against
   current plan
 - [x] Gesture overflow policy: no orphaned begin/end state
-- [ ] MIDI/event edge buffers: bounded merge by sample offset
+- [x] MIDI/event edge buffers: bounded merge by sample offset
 - [ ] Audio-to-UI feedback flags for stale events, process errors, topology
   refresh, overflow, and state dirty
 

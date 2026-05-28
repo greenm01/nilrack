@@ -10,6 +10,8 @@ const
   MaxRetiredProcessPlans* = 64
   MaxPluginParamEvents* = 256
   MaxPluginParamGestures* = 64
+  MaxMidiEventBytes* = 3
+  MaxMidiEvents* = 256
 
 type
   AudioIoMode* = enum
@@ -105,6 +107,17 @@ type
   PluginParamGestureTracker* = object
     count*: uint32
     targets*: array[MaxPluginParamGestures, ProcessParamTarget]
+
+  PluginMidiEvent* = object
+    portId*: PortId
+    sampleOffset*: uint32
+    byteCount*: uint32
+    bytes*: array[MaxMidiEventBytes, uint8]
+
+  MidiEventBuffer* = object
+    count*: uint32
+    events*: array[MaxMidiEvents, PluginMidiEvent]
+    overflowed*: bool
 
   RtQueue*[T; N: static int] = object
     data*: array[N, T]
