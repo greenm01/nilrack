@@ -234,9 +234,9 @@ Save the full rack state to KDL. Load it on startup. See
 Embed native Wayland plugin editors. Keep generated controls as fallback. See
 [plugins.md](plugins.md) and [architecture.md](architecture.md) milestone 4.
 
-- [ ] wayembed C bindings: `wayembed_host_interface`, server create/dispatch,
+- [x] wayembed C bindings: `wayembed_host_interface`, server create/dispatch,
   embed attach/resize
-- [ ] `src/embed/wayembed_host.nim`: implement host interface callbacks,
+- [x] `src/embed/wayembed_host.nim`: implement host interface callbacks,
   manage embed lifecycle
 - [ ] Plugin UI open/close operations: `pluginUiCreate`, `pluginUiDestroy`
 - [ ] Subsurface positioning: sync embed position with node location on canvas
