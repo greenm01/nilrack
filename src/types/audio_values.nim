@@ -1,6 +1,10 @@
 import std/atomics
 import core
 
+const
+  MaxProcessPlanNodes* = 64
+  MaxProcessPlanEntries* = 64
+
 type
   AudioIoMode* = enum
     aimBypass
@@ -20,9 +24,11 @@ type
     active*: bool
 
   ProcessPlan* = object
-    nodeOrder*: seq[NodeId]
+    nodeCount*: uint32
+    nodes*: array[MaxProcessPlanNodes, NodeId]
     entryCount*: uint32
-    entries*: array[4, AudioProcessEntry]
+    entries*: array[MaxProcessPlanEntries, AudioProcessEntry]
+    capacityExceeded*: bool
 
   JackClientHandle* = distinct pointer
   JackPortHandle* = distinct pointer
@@ -44,3 +50,19 @@ type
     data*: array[N, T]
     head*: Atomic[int]
     tail*: Atomic[int]
+
+proc addPlanNode*(plan: var ProcessPlan, nodeId: NodeId): bool =
+  if plan.nodeCount >= MaxProcessPlanNodes.uint32:
+    plan.capacityExceeded = true
+    return false
+  plan.nodes[plan.nodeCount.int] = nodeId
+  inc plan.nodeCount
+  true
+
+proc addProcessEntry*(plan: var ProcessPlan, entry: AudioProcessEntry): bool =
+  if plan.entryCount >= MaxProcessPlanEntries.uint32:
+    plan.capacityExceeded = true
+    return false
+  plan.entries[plan.entryCount.int] = entry
+  inc plan.entryCount
+  true

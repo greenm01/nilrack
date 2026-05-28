@@ -238,7 +238,7 @@ Items worth doing eventually but not blocking any of the above phases.
 - [ ] `nph --check` in CI
 - [ ] Nim test suite (`nimble test`): model invariants, entity ops, query correctness
 - [ ] Software renderer backend for headless testing
-- [ ] Replace `ProcessPlan.nodeOrder` `seq` and magic entry bound with named
+- [x] Replace `ProcessPlan.nodeOrder` `seq` and magic entry bound with named
   bounded storage constants
 - [ ] Plugin UI window detach (float plugin editor outside the rack window)
 - [ ] Multi-rack support (more than one `RackId` active)

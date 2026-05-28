@@ -27,14 +27,15 @@ proc buildSingleClapProcessPlan*(
     descriptor: PluginDescriptor,
     loaded: ClapLoadedPlugin,
 ): ProcessPlan =
-  result.nodeOrder.add(nodeId)
+  discard result.addPlanNode(nodeId)
   let mode = audioIoModeFor(descriptor)
-  result.entryCount = 1
-  result.entries[0] = AudioProcessEntry(
-    nodeId: nodeId,
-    pluginId: pluginId,
-    runtime: loaded.clapRuntimePointer(),
-    processBlock: clapProcessAudioBlock,
-    ioMode: mode,
-    active: mode != aimBypass,
+  discard result.addProcessEntry(
+    AudioProcessEntry(
+      nodeId: nodeId,
+      pluginId: pluginId,
+      runtime: loaded.clapRuntimePointer(),
+      processBlock: clapProcessAudioBlock,
+      ioMode: mode,
+      active: mode != aimBypass,
+    )
   )

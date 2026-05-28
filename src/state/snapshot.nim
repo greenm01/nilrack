@@ -6,4 +6,4 @@ proc compileProcessPlan*(m: NilrackModel): ProcessPlan =
   result = ProcessPlan()
   for rack in m.racks.data:
     for nodeId in m.nodesByRack.getOrDefault(rack.id, @[]):
-      result.nodeOrder.add(nodeId)
+      discard result.addPlanNode(nodeId)

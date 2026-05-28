@@ -15,6 +15,31 @@ proc localClapPath(): string =
   ""
 
 suite "process plan audio":
+  test "process plan nodes use bounded storage":
+    var plan: ProcessPlan
+    for i in 0 ..< MaxProcessPlanNodes:
+      check plan.addPlanNode(NodeId(i.uint32 + 1))
+
+    check plan.nodeCount == MaxProcessPlanNodes.uint32
+    check plan.nodes[0] == NodeId(1)
+    check plan.nodes[MaxProcessPlanNodes - 1] == NodeId(MaxProcessPlanNodes.uint32)
+    check not plan.addPlanNode(NodeId(999))
+    check plan.capacityExceeded
+    check plan.nodeCount == MaxProcessPlanNodes.uint32
+
+  test "process plan entries use bounded storage":
+    var plan: ProcessPlan
+    for i in 0 ..< MaxProcessPlanEntries:
+      check plan.addProcessEntry(AudioProcessEntry(nodeId: NodeId(i.uint32 + 1)))
+
+    check plan.entryCount == MaxProcessPlanEntries.uint32
+    check plan.entries[0].nodeId == NodeId(1)
+    check plan.entries[MaxProcessPlanEntries - 1].nodeId ==
+      NodeId(MaxProcessPlanEntries.uint32)
+    check not plan.addProcessEntry(AudioProcessEntry(nodeId: NodeId(999)))
+    check plan.capacityExceeded
+    check plan.entryCount == MaxProcessPlanEntries.uint32
+
   test "falls back to passthrough without a plan":
     var input1: array[8, float32]
     var input2: array[8, float32]
@@ -44,6 +69,8 @@ suite "process plan audio":
         var plan = buildSingleClapProcessPlan(
           NodeId(1), PluginId(1), loaded.descriptor, loaded.plugin
         )
+        check plan.nodeCount == 1
+        check plan.nodes[0] == NodeId(1)
         check plan.entryCount == 1
         check plan.entries[0].ioMode == aimMonoLeftToStereo
 
