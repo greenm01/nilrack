@@ -5,6 +5,8 @@ import wayland/protocols/wayland/client as wlCore
 import wayland/protocols/stable/xdgshell/client as xdgShell
 import ../types/ui_values
 
+proc getpid(): cint {.importc: "getpid", header: "<unistd.h>".}
+
 const
   DefaultWidth* = 1280'i32
   DefaultHeight* = 720'i32
@@ -13,6 +15,7 @@ type WaylandApp* = object
   display*: ptr Display
   registry*: ptr Registry
   compositor*: ptr Compositor
+  wlShm*: ptr Shm
   xdgWmBase*: ptr XdgWmBase
   seat*: ptr Seat
   surface*: ptr Surface
@@ -20,6 +23,7 @@ type WaylandApp* = object
   xdgToplevel*: ptr XdgToplevel
   wlPointer*: ptr Pointer
   wlKeyboard*: ptr Keyboard
+  fallbackBuffer*: ptr Buffer
   width*: int32
   height*: int32
   configured*: bool
@@ -59,6 +63,9 @@ proc onRegistryGlobal(
       name, xdg_wm_base_interface.addr, min(version, 3'u32)
     ))
     discard app.xdgWmBase.addListener(xdgWmBaseListener.addr, data)
+  elif iface == "wl_shm":
+    app.wlShm =
+      cast[ptr Shm](registry.`bind`(name, wl_shm_interface.addr, min(version, 1'u32)))
   elif iface == "wl_seat":
     app.seat =
       cast[ptr Seat](registry.`bind`(name, wl_seat_interface.addr, min(version, 5'u32)))
@@ -288,6 +295,43 @@ keyboardListener = KeyboardListener(
   repeatInfo: onKeyboardRepeatInfo,
 )
 
+# ---  SHM fallback buffer  ----------------------------------------------------
+
+proc attachFallbackBuffer*(app: var WaylandApp) =
+  if app.wlShm == nil or app.surface == nil:
+    return
+  if app.width <= 0 or app.height <= 0:
+    return
+  let stride = app.width * 4
+  let size = stride * app.height
+  let path = "/tmp/nilrack-shm-" & $getpid()
+  let fd = posix.open(path.cstring, O_CREAT or O_RDWR or O_TRUNC, Mode(0o600))
+  if fd < 0:
+    return
+  discard posix.unlink(path.cstring)
+  if ftruncate(fd, Off(size)) < 0:
+    discard posix.close(fd)
+    return
+  let data = mmap(nil, size.int, PROT_READ or PROT_WRITE, MAP_SHARED, fd, Off(0))
+  if data != MAP_FAILED:
+    let pixels = cast[ptr UncheckedArray[uint32]](data)
+    for i in 0 ..< (size div 4):
+      pixels[i] = 0xFF1A1A1A'u32 # opaque dark background
+    discard munmap(data, size.int)
+  let pool = app.wlShm.createPool(fd, size.int32)
+  discard posix.close(fd)
+  if pool == nil:
+    return
+  if app.fallbackBuffer != nil:
+    app.fallbackBuffer.destroy()
+  app.fallbackBuffer =
+    pool.createBuffer(0, app.width, app.height, stride, uint32(format_argb8888))
+  pool.destroy()
+  if app.fallbackBuffer == nil:
+    return
+  app.surface.attach(app.fallbackBuffer, 0, 0)
+  app.surface.commit()
+
 # ---  Public API  -------------------------------------------------------------
 
 proc initWaylandApp*(app: var WaylandApp, title: string = "nilrack") =
@@ -321,31 +365,17 @@ proc initWaylandApp*(app: var WaylandApp, title: string = "nilrack") =
   app.xdgToplevel.setAppId("nilrack".cstring)
 
   app.surface.commit()
+  while not app.configured:
+    discard app.display.dispatch()
+
+  app.attachFallbackBuffer()
   discard app.display.roundtrip()
 
   app.running = true
 
 proc pollAndDispatch*(app: var WaylandApp): bool =
-  discard app.display.flush()
-
-  while app.display.prepare_read() != 0:
-    if app.display.dispatch_pending() < 0:
-      return false
-
-  let fd = app.display.get_fd()
-  var readfds: TFdSet
-  FD_ZERO(readfds)
-  FD_SET(fd, readfds)
-  var timeout = Timeval(tv_sec: Time(0), tv_usec: Suseconds(16_000))
-  let ready = select(fd + 1, addr readfds, nil, nil, addr timeout)
-
-  if ready > 0 and FD_ISSET(fd, readfds) != 0:
-    discard app.display.read_events()
-  else:
-    app.display.cancel_read()
-
-  discard app.display.dispatch_pending()
-  discard app.display.flush()
+  if app.display.dispatch() < 0:
+    return false
   true
 
 proc drainMsgs*(app: var WaylandApp): seq[Msg] =
@@ -353,6 +383,8 @@ proc drainMsgs*(app: var WaylandApp): seq[Msg] =
   app.pendingMsgs = @[]
 
 proc shutdownWaylandApp*(app: var WaylandApp) =
+  if app.fallbackBuffer != nil:
+    app.fallbackBuffer.destroy()
   if app.wlPointer != nil:
     app.wlPointer.release()
   if app.wlKeyboard != nil:
