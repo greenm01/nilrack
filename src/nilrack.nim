@@ -60,6 +60,7 @@ when isMainModule:
     activeClap = clap.plugin
     activeDescriptor = clap.descriptor
     activeAttach = model.attachPluginDescriptor(activeDescriptor)
+    activeClap.bindClapPluginId(activeAttach.pluginId)
 
   var app: WaylandApp
   initWaylandApp(app)
@@ -118,7 +119,18 @@ when isMainModule:
           app.running = false
       else:
         discard
-    if jack.consumeAudioReconfigurationRequest(lastBackendReconfigGeneration):
+    var effect: Effect
+    while effects.popEffect(effect):
+      case effect.kind
+      of ekGraphDirty, ekProcessPlanDirty, ekTopologyRefresh, ekDiagnosticsDirty,
+          ekStateDirty:
+        discard
+    var retiredPlan: ptr ProcessPlan
+    if jack.consumeAudioReconfigurationRequest(
+      lastBackendReconfigGeneration, retiredPlan
+    ):
+      # The smoke path reuses stack-owned plan storage; heap plans enqueue retiredPlan.
+      discard retiredPlan
       if not activeClap.isNil:
         activeClap.stopClapProcessing()
         activeClap.deactivateClap()

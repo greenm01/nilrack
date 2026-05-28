@@ -37,18 +37,21 @@ suite "backend reconfiguration":
     var backend: JackBackend
     var plan: ProcessPlan
     var lastSeen: uint32
+    var retiredPlan: ptr ProcessPlan
     backend.planSlot.initProcessPlanSlot()
     backend.diagnostics.initAudioCallbackDiagnostics()
     backend.reconfiguration.initAudioReconfigurationState(48000, 64)
     discard backend.planSlot.publishProcessPlan(addr plan)
 
-    check not backend.consumeAudioReconfigurationRequest(lastSeen)
+    check not backend.consumeAudioReconfigurationRequest(lastSeen, retiredPlan)
+    check retiredPlan.isNil
     check backend.planSlot.loadProcessPlan() == addr plan
 
     backend.requestAudioReconfiguration(44100, 256)
 
-    check backend.consumeAudioReconfigurationRequest(lastSeen)
+    check backend.consumeAudioReconfigurationRequest(lastSeen, retiredPlan)
     check lastSeen == 1
     check backend.sampleRate == 44100
     check backend.bufferSize == 256
+    check retiredPlan == addr plan
     check backend.planSlot.loadProcessPlan().isNil

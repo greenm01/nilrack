@@ -2,10 +2,11 @@ import std/[strutils, unittest]
 
 const
   realtimeFiles = [
-    "src/audio/backend_reconfiguration.nim", "src/audio/callback_diagnostics.nim",
-    "src/audio/process_callback.nim", "src/audio/process_plan_audio.nim",
-    "src/audio/process_plan_store.nim", "src/audio/process_plan_targets.nim",
-    "src/audio/rt_queue.nim",
+    "src/audio/audio_feedback.nim", "src/audio/backend_reconfiguration.nim",
+    "src/audio/callback_diagnostics.nim", "src/audio/midi_event_buffer.nim",
+    "src/audio/param_event_queue.nim", "src/audio/process_callback.nim",
+    "src/audio/process_plan_audio.nim", "src/audio/process_plan_store.nim",
+    "src/audio/process_plan_targets.nim", "src/audio/rt_queue.nim",
   ]
 
   allocationPatterns = [

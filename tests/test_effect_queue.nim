@@ -48,3 +48,15 @@ suite "effect queue":
     check not queue.enqueueDiagnosticsDirty()
     check queue.overflowed
     check queue.count == MaxEffectQueueEntries.uint32
+
+  test "drain clears routed effects":
+    var queue: EffectQueue
+    var effect: Effect
+    var drained: uint32
+
+    check queue.routeMsgEffects(Msg(kind: msgPluginLoaded))
+    while queue.popEffect(effect):
+      inc drained
+
+    check drained == 2
+    check queue.count == 0

@@ -36,15 +36,24 @@ proc loadAudioReconfigurationRequest*(
   result.bufferSize = backend.reconfiguration.bufferSize.load(moAcquire)
 
 proc consumeAudioReconfigurationRequest*(
-    backend: var JackBackend, lastSeenGeneration: var uint32
+    backend: var JackBackend,
+    lastSeenGeneration: var uint32,
+    retiredPlan: var ptr ProcessPlan,
 ): bool =
   let request = backend.loadAudioReconfigurationRequest()
   if request.generation == lastSeenGeneration:
+    retiredPlan = nil
     return false
   lastSeenGeneration = request.generation
   backend.sampleRate = request.sampleRate
   backend.bufferSize = request.bufferSize
   backend.reconfiguration.sampleRate.store(request.sampleRate, moRelaxed)
   backend.reconfiguration.bufferSize.store(request.bufferSize, moRelaxed)
-  discard backend.planSlot.clearProcessPlan()
+  retiredPlan = backend.planSlot.clearProcessPlan()
   true
+
+proc consumeAudioReconfigurationRequest*(
+    backend: var JackBackend, lastSeenGeneration: var uint32
+): bool =
+  var retiredPlan: ptr ProcessPlan
+  backend.consumeAudioReconfigurationRequest(lastSeenGeneration, retiredPlan)
