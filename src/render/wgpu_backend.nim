@@ -226,27 +226,29 @@ proc makePipeline(
     targetCount: 1,
     targets: target.addr,
   )
-  result = device.create(
-    vaddr RenderPipelineDescriptor(
-      label: label.toStringView(),
-      layout: layout,
-      vertex: VertexState(
-        module: shader,
-        entryPoint: "vs_main".toStringView(),
-        bufferCount: 1,
-        buffers: vertexLayout.addr,
-      ),
-      primitive: PrimitiveState(
-        topology: PrimitiveTopology.TriangleList,
-        stripIndexFormat: IndexFormat.Undefined,
-        frontFace: FrontFace.CCW,
-        cullMode: CullMode.None,
-      ),
-      multisample:
-        MultisampleState(count: 1, mask: uint32.high, alphaToCoverageEnabled: 0),
-      fragment: fragment.addr,
-    )
+  var vertex = VertexState(
+    module: shader,
+    entryPoint: "vs_main".toStringView(),
+    bufferCount: 1,
+    buffers: vertexLayout.addr,
   )
+  var primitive = PrimitiveState(
+    topology: PrimitiveTopology.TriangleList,
+    stripIndexFormat: IndexFormat.Undefined,
+    frontFace: FrontFace.CCW,
+    cullMode: CullMode.None,
+  )
+  var multisample =
+    MultisampleState(count: 1, mask: uint32.high, alphaToCoverageEnabled: 0)
+  var desc = RenderPipelineDescriptor(
+    label: label.toStringView(),
+    layout: layout,
+    vertex: vertex,
+    primitive: primitive,
+    multisample: multisample,
+    fragment: fragment.addr,
+  )
+  result = device.create(desc.addr)
   doAssert result != nil, "failed to create render pipeline"
 
 proc initPipelines(b: var WgpuBackend) =
@@ -471,12 +473,13 @@ proc initWgpuBackend*(
   b.adapter = adpt
 
   var dev: WgpuDevice
+  var deviceDesc = DeviceDescriptor(
+    defaultQueue: QueueDescriptor(),
+    deviceLostCallbackInfo:
+      DeviceLostCallbackInfo(mode: cast[cint](CallbackMode.AllowSpontaneous)),
+  )
   var devFuture = b.adpt().request(
-      vaddr DeviceDescriptor(
-        defaultQueue: QueueDescriptor(),
-        deviceLostCallbackInfo:
-          DeviceLostCallbackInfo(mode: cast[cint](CallbackMode.AllowSpontaneous)),
-      ),
+      deviceDesc.addr,
       RequestDeviceCallbackInfo(
         mode: CallbackMode.AllowSpontaneous,
         callback: onDeviceRequest,
@@ -551,14 +554,17 @@ proc renderDrawList*(b: var WgpuBackend, drawList: NilDrawList) =
   else:
     let clearColor = wgpu.Color(r: 0.10, g: 0.10, b: 0.10, a: 1.0)
 
-  let renderPass = encoder.begin(
-    vaddr RenderPassDescriptor(
-      colorAttachmentCount: 1,
-      colorAttachments: vaddr RenderPassColorAttachment(
-        view: view, loadOp: Clear, storeOp: Store, clearValue: clearColor
-      ),
-    )
+  var colorAttachment = RenderPassColorAttachment(
+    view: view,
+    depthSlice: high(uint32),
+    loadOp: Clear,
+    storeOp: Store,
+    clearValue: clearColor,
   )
+  var passDesc = RenderPassDescriptor(
+    colorAttachmentCount: 1, colorAttachments: colorAttachment.addr
+  )
+  let renderPass = encoder.begin(passDesc.addr)
   if batch.vertices.len > 0:
     renderPass.setVertexBuffer(0, b.vbuf(), 0, b.vertexBufferSize)
     if batch.rectVertexCount > 0:

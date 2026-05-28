@@ -1,3 +1,9 @@
+struct VertexIn {
+  @location(0) pos: vec2<f32>,
+  @location(1) uv: vec2<f32>,
+  @location(2) color: vec4<f32>,
+};
+
 struct VertexOut {
   @builtin(position) position: vec4<f32>,
   @location(0) uv: vec2<f32>,
@@ -5,15 +11,11 @@ struct VertexOut {
 };
 
 @vertex
-fn vs_main(
-  @location(0) pos: vec2<f32>,
-  @location(1) uv: vec2<f32>,
-  @location(2) color: vec4<f32>,
-) -> VertexOut {
+fn vs_main(in: VertexIn) -> VertexOut {
   var out: VertexOut;
-  out.position = vec4<f32>(pos, 0.0, 1.0);
-  out.uv = uv;
-  out.color = color;
+  out.position = vec4<f32>(in.pos, 0.0, 1.0);
+  out.uv = in.uv;
+  out.color = in.color;
   return out;
 }
 
