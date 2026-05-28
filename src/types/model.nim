@@ -16,6 +16,13 @@ type
     pdIn
     pdOut
 
+  CableRoutePolicy* = enum
+    crAuto
+    crChannelMap
+    crSumToMono
+    crDropExtra
+    crSelectChannel
+
   PluginApi* = enum
     paClap
     paLv2
@@ -47,6 +54,7 @@ type
     srcPort*: PortId
     dstPort*: PortId
     kind*: PortKind
+    routePolicy*: CableRoutePolicy
 
   PortData* = object
     id*: PortId

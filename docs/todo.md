@@ -73,7 +73,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
   stopped-backend immediate drain
 - [x] `ProcessPlan` target lookup: live plugin/param/port validation for
   stale UI-to-audio events
-- [ ] Compile error data: `CycleDetected`, capacity exceeded, missing runtime,
+- [x] Compile error data: `CycleDetected`, capacity exceeded, missing runtime,
   and unsupported route policy surfaced to UI
 
 **Realtime diagnostics**

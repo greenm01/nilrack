@@ -24,3 +24,9 @@ proc cableDestroy*(m: var NilrackModel, id: CableId) =
           s.add(c)
       s
   discard m.cables.delete(id)
+
+proc cableSetRoutePolicy*(
+    m: var NilrackModel, id: CableId, routePolicy: CableRoutePolicy
+) =
+  if m.cables.contains(id):
+    m.cables.mEntity(id).routePolicy = routePolicy
