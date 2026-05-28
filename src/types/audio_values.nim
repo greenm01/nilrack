@@ -4,6 +4,9 @@ import core
 const
   MaxProcessPlanNodes* = 64
   MaxProcessPlanEntries* = 64
+  MaxProcessPlanPluginTargets* = 64
+  MaxProcessPlanParamTargets* = 256
+  MaxProcessPlanEventPortTargets* = 128
   MaxRetiredProcessPlans* = 64
 
 type
@@ -24,11 +27,22 @@ type
     ioMode*: AudioIoMode
     active*: bool
 
+  ProcessParamTarget* = object
+    pluginId*: PluginId
+    paramId*: ParamId
+
   ProcessPlan* = object
+    generation*: uint64
     nodeCount*: uint32
     nodes*: array[MaxProcessPlanNodes, NodeId]
     entryCount*: uint32
     entries*: array[MaxProcessPlanEntries, AudioProcessEntry]
+    pluginTargetCount*: uint32
+    pluginTargets*: array[MaxProcessPlanPluginTargets, PluginId]
+    paramTargetCount*: uint32
+    paramTargets*: array[MaxProcessPlanParamTargets, ProcessParamTarget]
+    eventPortTargetCount*: uint32
+    eventPortTargets*: array[MaxProcessPlanEventPortTargets, PortId]
     capacityExceeded*: bool
 
   ProcessPlanSlot* = object

@@ -1,9 +1,12 @@
 import std/[os, unittest]
 
 import ../src/audio/process_plan_audio
+import ../src/audio/process_plan_targets
 import ../src/plugins/clap_host
+import ../src/plugins/plugin_adapter
+import ../src/state/engine
 import ../src/systems/graph_process_plan
-import ../src/types/[audio_values, core]
+import ../src/types/[audio_values, core, plugin_values]
 
 proc localClapPath(): string =
   let envPath = getEnv("NILRACK_TEST_CLAP")
@@ -39,6 +42,76 @@ suite "process plan audio":
     check not plan.addProcessEntry(AudioProcessEntry(nodeId: NodeId(999)))
     check plan.capacityExceeded
     check plan.entryCount == MaxProcessPlanEntries.uint32
+
+  test "process plan target lookup uses bounded storage":
+    var plan: ProcessPlan
+    check plan.addPluginTarget(PluginId(1))
+    check plan.addPluginTarget(PluginId(1))
+    check plan.pluginTargetCount == 1
+
+    for i in 0 ..< MaxProcessPlanParamTargets:
+      check plan.addParamTarget(PluginId(1), ParamId(i.uint32 + 1))
+
+    check plan.paramTargetCount == MaxProcessPlanParamTargets.uint32
+    check not plan.addParamTarget(PluginId(1), ParamId(9999))
+    check plan.capacityExceeded
+
+    var portPlan: ProcessPlan
+    for i in 0 ..< MaxProcessPlanEventPortTargets:
+      check portPlan.addEventPortTarget(PortId(i.uint32 + 1))
+
+    check portPlan.eventPortTargetCount == MaxProcessPlanEventPortTargets.uint32
+    check not portPlan.addEventPortTarget(PortId(9999))
+    check portPlan.capacityExceeded
+
+  test "process plan target lookup rejects stale targets":
+    var plan: ProcessPlan
+    check plan.addPluginTarget(PluginId(1))
+    check plan.addParamTarget(PluginId(1), ParamId(10))
+    check plan.addEventPortTarget(PortId(20))
+
+    check hasLivePluginTarget(addr plan, PluginId(1))
+    check not hasLivePluginTarget(addr plan, PluginId(2))
+    check hasParamTarget(addr plan, PluginId(1), ParamId(10))
+    check not hasParamTarget(addr plan, PluginId(2), ParamId(10))
+    check not hasParamTarget(addr plan, PluginId(1), ParamId(11))
+    check hasEventPortTarget(addr plan, PortId(20))
+    check not hasEventPortTarget(addr plan, PortId(21))
+
+  test "compiled model plan carries plugin parameter and event port targets":
+    var model = NilrackModel()
+    let descriptor = PluginDescriptor(
+      api: paClap,
+      path: "/tmp/example.clap",
+      uri: "dev.nilrack.example",
+      name: "Example",
+      ports:
+        @[
+          PluginPortDescriptor(
+            index: 0, externalId: 7, name: "MIDI In", kind: pkMidi, direction: pdIn
+          )
+        ],
+      params:
+        @[
+          PluginParamDescriptor(
+            index: 0,
+            externalId: 100,
+            name: "Gain",
+            minVal: 0.0,
+            maxVal: 1.0,
+            defaultVal: 0.5,
+            currentVal: 0.5,
+          )
+        ],
+    )
+    let attached = model.attachPluginDescriptor(descriptor)
+    let paramId = model.params.data[0].id
+    let portId = model.ports.data[0].id
+
+    var plan = model.compileProcessPlan()
+    check hasLivePluginTarget(addr plan, attached.pluginId)
+    check hasParamTarget(addr plan, attached.pluginId, paramId)
+    check hasEventPortTarget(addr plan, portId)
 
   test "falls back to passthrough without a plan":
     var input1: array[8, float32]

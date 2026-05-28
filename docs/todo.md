@@ -71,7 +71,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
 - [x] Plan publication API: pointer-sized current-plan swap, no callback locks
 - [x] Retire queue: callback epoch, `safeAfterEpoch`, UI-frame drain,
   stopped-backend immediate drain
-- [ ] `ProcessPlan` target lookup: live plugin/param/port validation for
+- [x] `ProcessPlan` target lookup: live plugin/param/port validation for
   stale UI-to-audio events
 - [ ] Compile error data: `CycleDetected`, capacity exceeded, missing runtime,
   and unsupported route policy surfaced to UI
