@@ -95,7 +95,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
 **Plugin runtime boundary**
 - [x] `PluginRuntimeOps` uses fixed-layout records only: no `seq`, closures,
   `ref` objects, or exceptions across the boundary
-- [ ] `ProcessContext` bus and event slices match the IPC-friendly shape in
+- [x] `ProcessContext` bus and event slices match the IPC-friendly shape in
   [plugin-runtime.md](plugin-runtime.md)
 - [ ] Host callback reentrancy: restart, callback, log, param, fd, timer, and
   state-dirty callbacks are flag-setting or bounded-record writes

@@ -1,6 +1,6 @@
 import std/[strutils, unittest]
 
-import ../src/types/[core, plugin_runtime_values]
+import ../src/types/[audio_values, core, plugin_runtime_values]
 
 proc okActivate(
     runtime: pointer, sampleRate: float64, minFrames, maxFrames: uint32
@@ -16,7 +16,7 @@ proc okSimple(runtime: pointer): PluginRuntimeStatus {.nimcall, gcsafe, raises: 
   prsOk
 
 proc okProcess(
-    runtime: pointer, context: pointer
+    runtime: pointer, context: ptr ProcessContext
 ): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
   discard runtime
   discard context
@@ -40,6 +40,35 @@ suite "plugin runtime ops":
     check runtime.pluginId == PluginId(1)
     check runtime.ops.activate(runtime.runtime, 48000.0, 1, 64) == prsOk
     check runtime.ops.process(runtime.runtime, nil) == prsOk
+
+  test "process context uses pointer slices and counts":
+    var paramEvents: array[2, PluginParamEvent]
+    var midiEvents: array[1, PluginMidiEvent]
+    var inputBuses: array[1, PluginAudioBus]
+    var outputBuses: array[1, PluginAudioBus]
+    var transport = PluginTransportSnapshot(playing: true, frame: 128, tempo: 120.0)
+
+    let context = ProcessContext(
+      frames: 64,
+      audioInputs: cast[ptr UncheckedArray[PluginAudioBus]](addr inputBuses[0]),
+      audioInputBusCount: inputBuses.len.uint32,
+      audioOutputs: cast[ptr UncheckedArray[PluginAudioBus]](addr outputBuses[0]),
+      audioOutputBusCount: outputBuses.len.uint32,
+      events: PluginEventContext(
+        paramEvents: cast[ptr UncheckedArray[PluginParamEvent]](addr paramEvents[0]),
+        paramEventCount: paramEvents.len.uint32,
+        midiEvents: cast[ptr UncheckedArray[PluginMidiEvent]](addr midiEvents[0]),
+        midiEventCount: midiEvents.len.uint32,
+        transport: addr transport,
+      ),
+    )
+
+    check context.frames == 64
+    check context.audioInputBusCount == 1
+    check context.audioOutputBusCount == 1
+    check context.events.paramEventCount == 2
+    check context.events.midiEventCount == 1
+    check context.events.transport[].playing
 
   test "runtime ops type module stays boundary-safe":
     let source = readFile("src/types/plugin_runtime_values.nim")
