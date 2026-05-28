@@ -33,7 +33,7 @@ boundary. No plugins yet. See [architecture.md](architecture.md) milestone 1.
 - [x] `src/render/renderer.nim`: begin/end frame, submit draw list (stub — clear only)
 - [x] `src/render/draw_list.nim`: `NilDrawList` append helpers
 - [x] `src/types/render_values.nim`: opaque wgpu handles, `WgpuBackend`, `Renderer` types
-- [ ] stb_truetype: glyph atlas build on startup, text run draw command
+- [x] Pixie + 0xProto glyph atlas build on startup, text run draw command
 
 **Audio**
 - [x] JACK C bindings: client, ports, activate/deactivate, process callback
@@ -51,7 +51,7 @@ boundary. No plugins yet. See [architecture.md](architecture.md) milestone 1.
 **Meters**
 - [x] Lock-free meter snapshot path: audio thread writes, UI thread reads via `Atomic[float32]`
 - [x] Meter draw commands in draw list (`layoutShell`)
-- [ ] Meter display visible — blocked on rect draw pipeline in renderer
+- [x] Meter display visible through rect draw pipeline in renderer
 
 **Exit**
 - [x] Clean shutdown: deactivate JACK → shutdown renderer → close Wayland

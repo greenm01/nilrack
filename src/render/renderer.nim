@@ -7,7 +7,7 @@ proc initRenderer*(
   r.backend.initWgpuBackend(display, wlSurface, width, height)
 
 proc renderFrame*(r: var Renderer, drawList: NilDrawList) =
-  r.backend.renderClear()
+  r.backend.renderDrawList(drawList)
 
 proc resizeRenderer*(r: var Renderer, width, height: uint32) =
   r.backend.resizeWgpuBackend(width, height)
