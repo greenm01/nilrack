@@ -80,6 +80,9 @@ proc activateJack*(b: var JackBackend) =
   let client = cast[ptr JackClient](b.client)
   doAssert jackActivate(client) == 0, "failed to activate JACK client"
 
+proc setJackProcessPlan*(b: var JackBackend, plan: ptr ProcessPlan) =
+  b.processPlan = plan
+
 proc deactivateJack*(b: var JackBackend) =
   if pointer(b.client) != nil:
     discard jackDeactivate(cast[ptr JackClient](b.client))

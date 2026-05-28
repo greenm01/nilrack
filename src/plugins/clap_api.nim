@@ -27,6 +27,12 @@ const
   ClapEventParamValueType* = 5'u16
   ClapEventIsLive* = 1'u32 shl 0
 
+  ClapProcessError* = 0'i32
+  ClapProcessContinue* = 1'i32
+  ClapProcessContinueIfNotQuiet* = 2'i32
+  ClapProcessTail* = 3'i32
+  ClapProcessSleep* = 4'i32
+
 type
   ClapId* = uint32
 

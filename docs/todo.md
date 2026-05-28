@@ -69,9 +69,10 @@ milestone 2 and [plugins.md](plugins.md).
 - [x] `src/plugins/clap_host.nim`: load plugin by path, instantiate, query
   descriptor, ports, params, and state capability
 - [x] `src/plugins/plugin_adapter.nim`: translate CLAP metadata into internal model
-- [ ] `src/plugins/clap_host.nim`: activate and process through CLAP plugin
+- [x] `src/plugins/clap_host.nim`: activate and process through one CLAP plugin
 - [ ] `src/systems/plugin_lifecycle.nim`: load, activate, deactivate, unload
 - [ ] `src/systems/graph_compile.nim`: compile rack graph to `ProcessPlan`
+- [x] `src/systems/graph_process_plan.nim`: single-plugin JACK process plan
 - [ ] `src/systems/graph_process_plan.nim`: build process plan from compiled graph
 - [x] Plugin node in rack UI: title bar and port slots
 - [ ] Plugin node in rack UI: bypass toggle

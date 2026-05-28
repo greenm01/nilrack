@@ -1,5 +1,6 @@
 import std/atomics
 import ../types/audio_values
+import process_plan_audio
 
 var meterLevels*: array[4, Atomic[float32]]
 
@@ -27,16 +28,21 @@ proc jackProcess*(nframes: uint32, arg: pointer): cint {.cdecl.} =
   let out2 = cast[ptr UncheckedArray[float32]](jackPortGetBuffer(
     cast[ptr JackPort](b.outPort2), nframes
   ))
-  copyMem(out1, in1, nframes.int * sizeof(float32))
-  copyMem(out2, in2, nframes.int * sizeof(float32))
-  var peak1, peak2 = 0.0'f32
+  discard processAudioBlock(b.processPlan, in1, in2, out1, out2, nframes)
+  var inPeak, outPeak = 0.0'f32
   for i in 0 ..< nframes.int:
-    let a1 = abs(in1[i])
-    let a2 = abs(in2[i])
-    if a1 > peak1:
-      peak1 = a1
-    if a2 > peak2:
-      peak2 = a2
-  meterLevels[0].store(peak1, moRelaxed)
-  meterLevels[1].store(peak2, moRelaxed)
+    let inA1 = abs(in1[i])
+    let inA2 = abs(in2[i])
+    let outA1 = abs(out1[i])
+    let outA2 = abs(out2[i])
+    if inA1 > inPeak:
+      inPeak = inA1
+    if inA2 > inPeak:
+      inPeak = inA2
+    if outA1 > outPeak:
+      outPeak = outA1
+    if outA2 > outPeak:
+      outPeak = outA2
+  meterLevels[0].store(inPeak, moRelaxed)
+  meterLevels[1].store(outPeak, moRelaxed)
   0

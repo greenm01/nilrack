@@ -5,6 +5,7 @@ import render/renderer
 import audio/jack_backend
 import audio/process_callback
 import systems/render_projection
+import systems/graph_process_plan
 import plugins/[clap_host, plugin_adapter]
 import plugins/vst3_host
 
@@ -45,6 +46,8 @@ when isMainModule:
   let args = parseArgs()
 
   var activeClap: ClapLoadedPlugin
+  var activeDescriptor: PluginDescriptor
+  var activeAttach: PluginAttachResult
   var model = NilrackModel()
   if args.clapPath.len > 0:
     let clap = loadClapPlugin(args.clapPath)
@@ -52,7 +55,8 @@ when isMainModule:
       stderr.writeLine("nilrack: " & clap.error)
       quit(1)
     activeClap = clap.plugin
-    discard model.attachPluginDescriptor(clap.descriptor)
+    activeDescriptor = clap.descriptor
+    activeAttach = model.attachPluginDescriptor(activeDescriptor)
 
   var app: WaylandApp
   initWaylandApp(app)
@@ -68,6 +72,20 @@ when isMainModule:
 
   var jack: JackBackend
   initJackBackend(jack, "nilrack")
+
+  var processPlan: ProcessPlan
+  if not activeClap.isNil:
+    if not activeClap.activateClap(jack.sampleRate.float64, 1, jack.bufferSize):
+      stderr.writeLine("nilrack: failed to activate CLAP plugin")
+      quit(1)
+    if not activeClap.startClapProcessing():
+      stderr.writeLine("nilrack: failed to start CLAP processing")
+      quit(1)
+    processPlan = buildSingleClapProcessPlan(
+      activeAttach.nodeId, activeAttach.pluginId, activeDescriptor, activeClap
+    )
+    jack.setJackProcessPlan(addr processPlan)
+
   activateJack(jack)
 
   var nilampUi: Vst3UiHost
@@ -99,6 +117,9 @@ when isMainModule:
 
   deactivateJack(jack)
   shutdownJackBackend(jack)
+  if not activeClap.isNil:
+    activeClap.stopClapProcessing()
+    activeClap.deactivateClap()
   if args.vst3UiSpike:
     nilampUi.shutdownNilampVst3Ui()
   activeClap.close()
