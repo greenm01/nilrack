@@ -46,7 +46,7 @@ type
   ClapPluginEntry* {.bycopy.} = object
     clapVersion*: ClapVersion
     init*: proc(pluginPath: cstring): bool {.cdecl.}
-    deinit*: proc() {.cdecl.}
+    deinit*: proc() {.cdecl, gcsafe, raises: [].}
     getFactory*: proc(factoryId: cstring): pointer {.cdecl.}
 
   ClapPluginDescriptor* {.bycopy.} = object
@@ -87,16 +87,16 @@ type
     desc*: ptr ClapPluginDescriptor
     pluginData*: pointer
     init*: proc(plugin: ptr ClapPlugin): bool {.cdecl.}
-    destroy*: proc(plugin: ptr ClapPlugin) {.cdecl.}
+    destroy*: proc(plugin: ptr ClapPlugin) {.cdecl, gcsafe, raises: [].}
     activate*: proc(
       plugin: ptr ClapPlugin,
       sampleRate: cdouble,
       minFramesCount: uint32,
       maxFramesCount: uint32,
-    ): bool {.cdecl.}
-    deactivate*: proc(plugin: ptr ClapPlugin) {.cdecl.}
-    startProcessing*: proc(plugin: ptr ClapPlugin): bool {.cdecl.}
-    stopProcessing*: proc(plugin: ptr ClapPlugin) {.cdecl.}
+    ): bool {.cdecl, gcsafe, raises: [].}
+    deactivate*: proc(plugin: ptr ClapPlugin) {.cdecl, gcsafe, raises: [].}
+    startProcessing*: proc(plugin: ptr ClapPlugin): bool {.cdecl, gcsafe, raises: [].}
+    stopProcessing*: proc(plugin: ptr ClapPlugin) {.cdecl, gcsafe, raises: [].}
     reset*: proc(plugin: ptr ClapPlugin) {.cdecl.}
     process*: proc(plugin: ptr ClapPlugin, process: ptr ClapProcess): int32 {.cdecl.}
     getExtension*: proc(plugin: ptr ClapPlugin, id: cstring): pointer {.cdecl.}

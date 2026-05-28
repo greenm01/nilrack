@@ -1,8 +1,10 @@
 import std/atomics
-import audio_values
 import core
+import audio_values
 
-const MaxPluginEventThreadEvents* = 128
+const
+  MaxPluginEventThreadEvents* = 128
+  MaxPluginRuntimes* = 64
 
 type
   PluginRuntimeStatus* = enum
@@ -93,3 +95,8 @@ type
     pluginId*: PluginId
     runtime*: pointer
     ops*: ptr PluginRuntimeOps
+
+  PluginRuntimeStore* = object
+    count*: uint32
+    runtimes*: array[MaxPluginRuntimes, PluginRuntimeRef]
+    capacityExceeded*: bool

@@ -271,6 +271,84 @@ proc deactivateClap*(loaded: ClapLoadedPlugin) =
 proc clapRuntimePointer*(loaded: ClapLoadedPlugin): pointer =
   cast[pointer](loaded)
 
+proc clapRuntimeActivate(
+    runtime: pointer, sampleRate: float64, minFrames, maxFrames: uint32
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
+  let loaded = cast[ClapLoadedPlugin](runtime)
+  if loaded.isNil:
+    return prsFailed
+  try:
+    if loaded.activateClap(sampleRate, minFrames, maxFrames): prsOk else: prsFailed
+  except CatchableError:
+    prsFailed
+
+proc clapRuntimeDeactivate(
+    runtime: pointer
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
+  let loaded = cast[ClapLoadedPlugin](runtime)
+  if loaded.isNil:
+    return prsFailed
+  try:
+    loaded.deactivateClap()
+    prsOk
+  except CatchableError:
+    prsFailed
+
+proc clapRuntimeStartProcessing(
+    runtime: pointer
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
+  let loaded = cast[ClapLoadedPlugin](runtime)
+  if loaded.isNil:
+    return prsFailed
+  try:
+    if loaded.startClapProcessing(): prsOk else: prsFailed
+  except CatchableError:
+    prsFailed
+
+proc clapRuntimeStopProcessing(
+    runtime: pointer
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
+  let loaded = cast[ClapLoadedPlugin](runtime)
+  if loaded.isNil:
+    return prsFailed
+  try:
+    loaded.stopClapProcessing()
+    prsOk
+  except CatchableError:
+    prsFailed
+
+proc clapRuntimeProcess(
+    runtime: pointer, context: ptr ProcessContext
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
+  discard runtime
+  discard context
+  prsBypass
+
+proc clapRuntimeDestroy(runtime: pointer) {.nimcall, gcsafe, raises: [].} =
+  let loaded = cast[ClapLoadedPlugin](runtime)
+  if loaded.isNil:
+    return
+  try:
+    loaded.close()
+  except CatchableError:
+    discard
+
+var clapRuntimeOps = PluginRuntimeOps(
+  activate: clapRuntimeActivate,
+  deactivate: clapRuntimeDeactivate,
+  startProcessing: clapRuntimeStartProcessing,
+  stopProcessing: clapRuntimeStopProcessing,
+  process: clapRuntimeProcess,
+  destroy: clapRuntimeDestroy,
+)
+
+proc clapPluginRuntimeRef*(
+    loaded: ClapLoadedPlugin, pluginId: PluginId
+): PluginRuntimeRef =
+  PluginRuntimeRef(
+    pluginId: pluginId, runtime: loaded.clapRuntimePointer(), ops: addr clapRuntimeOps
+  )
+
 proc processStatusOk(status: int32): bool =
   status != ClapProcessError
 

@@ -125,7 +125,7 @@ CLAP workflow on top of that foundation.
 - [x] `src/plugins/plugin_adapter.nim`: translate CLAP metadata into internal model
 - [x] `src/plugins/clap_host.nim`: activate and process through one CLAP plugin
 - [x] `src/systems/graph_process_plan.nim`: single-plugin JACK process plan
-- [ ] `src/systems/plugin_lifecycle.nim`: CLAP load, activate, deactivate,
+- [x] `src/systems/plugin_lifecycle.nim`: CLAP load, activate, deactivate,
   unload through the runtime store
 - [ ] `src/systems/graph_compile.nim`: one-rack, acyclic graph compile to a
   published `ProcessPlan`
