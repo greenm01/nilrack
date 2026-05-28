@@ -169,7 +169,7 @@ results. Show available plugins in a browser. See [plugins.md](plugins.md).
   stdout, exit
 - [ ] `src/systems/plugin_scan.nim`: fork scanner helper, collect KDL output,
   enforce timeout, and collect exit status
-- [ ] Scan result schema in KDL: path, mtime, descriptor, ports, params,
+- [x] Scan result schema in KDL: path, mtime, descriptor, ports, params,
   UI caps, scan status, typed failure reason
 - [ ] `ScanFailed` cache entries for timeout, non-zero exit, empty output, and
   malformed KDL
