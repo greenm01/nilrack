@@ -1,5 +1,8 @@
 import std/[options, tables]
 import ../types/core
+import ../key_ops
+
+export key_ops
 
 proc len*[ID, T](manager: EntityManager[ID, T]): int =
   manager.data.len

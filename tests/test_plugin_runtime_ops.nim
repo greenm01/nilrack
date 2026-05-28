@@ -1,5 +1,7 @@
 import std/[strutils, unittest]
 
+import ../src/plugins/plugin_runtime_api
+import ../src/key_ops
 import ../src/types/[audio_values, core, plugin_runtime_values]
 
 proc okActivate(
@@ -36,10 +38,11 @@ suite "plugin runtime ops":
       destroy: okDestroy,
     )
     let runtime = PluginRuntimeRef(pluginId: PluginId(1), runtime: nil, ops: addr ops)
+    let runtimeOps = runtime.runtimeOps()
 
     check runtime.pluginId == PluginId(1)
-    check runtime.ops.activate(runtime.runtime, 48000.0, 1, 64) == prsOk
-    check runtime.ops.process(runtime.runtime, nil) == prsOk
+    check runtimeOps.activate(runtime.runtime, 48000.0, 1, 64) == prsOk
+    check runtimeOps.process(runtime.runtime, nil) == prsOk
 
   test "process context uses pointer slices and counts":
     var paramEvents: array[2, PluginParamEvent]
@@ -70,11 +73,11 @@ suite "plugin runtime ops":
     check context.events.midiEventCount == 1
     check context.events.transport[].playing
 
-  test "runtime ops type module stays boundary-safe":
-    let source = readFile("src/types/plugin_runtime_values.nim")
+  test "runtime ops api stays boundary-safe":
+    let source = readFile("src/plugins/plugin_runtime_api.nim")
 
     for forbidden in ["seq", "ref object", "closure", "raise ", "raise(", "except"]:
-      checkpoint "plugin runtime values must not contain " & forbidden
+      checkpoint "plugin runtime api must not contain " & forbidden
       check not source.contains(forbidden)
 
     check source.contains("raises: []")

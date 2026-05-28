@@ -1,19 +1,15 @@
 import std/[os, unittest]
 
+import ../src/plugins/plugin_runtime_api
 import ../src/systems/plugin_lifecycle
-import ../src/types/[audio_values, core, plugin_runtime_values]
+import ../src/types/[core, plugin_runtime_values]
 
-proc testProcessBlock(
-    runtime: pointer, in1, in2, out1, out2: pointer, nframes: uint32, mode: AudioIoMode
-): bool {.nimcall, gcsafe, raises: [].} =
+proc testProcess(
+    runtime: pointer, context: ptr ProcessContext
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
   discard runtime
-  discard in1
-  discard in2
-  discard out1
-  discard out2
-  discard nframes
-  discard mode
-  true
+  discard context
+  prsOk
 
 proc localClapPath(): string =
   let envPath = getEnv("NILRACK_TEST_CLAP")
@@ -28,11 +24,9 @@ suite "plugin lifecycle":
   test "runtime store keeps plugin refs in bounded storage":
     var store: PluginRuntimeStore
     var marker: int
+    var ops = PluginRuntimeOps(process: testProcess)
     let runtime = PluginRuntimeRef(
-      pluginId: PluginId(1),
-      runtime: addr marker,
-      ops: cast[ptr PluginRuntimeOps](1),
-      processBlock: testProcessBlock,
+      pluginId: PluginId(1), runtime: addr marker, ops: cast[pointer](addr ops)
     )
 
     check store.addPluginRuntime(runtime)

@@ -1,5 +1,6 @@
 import std/tables
 import ../types/core
+import ../key_ops
 import ../state/[entity_manager, id_gen, model]
 
 proc renderSurfaceCreate*(m: var NilrackModel): RenderSurfaceId =

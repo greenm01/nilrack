@@ -2,6 +2,7 @@ import std/[os, unittest]
 
 import ../src/audio/process_plan_audio
 import ../src/audio/process_plan_targets
+import ../src/plugins/plugin_runtime_api
 import ../src/plugins/clap_host
 import ../src/plugins/plugin_adapter
 import ../src/state/engine
@@ -18,17 +19,12 @@ proc localClapPath(): string =
     return nilamp
   ""
 
-proc testProcessBlock(
-    runtime: pointer, in1, in2, out1, out2: pointer, nframes: uint32, mode: AudioIoMode
-): bool {.nimcall, gcsafe, raises: [].} =
+proc testProcess(
+    runtime: pointer, context: ptr ProcessContext
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
   discard runtime
-  discard in1
-  discard in2
-  discard out1
-  discard out2
-  discard nframes
-  discard mode
-  true
+  discard context
+  prsOk
 
 suite "process plan audio":
   test "process plan nodes use bounded storage":
@@ -140,11 +136,9 @@ suite "process plan audio":
     let pluginId = model.pluginAttachToNode(
       pluginNode, paClap, "/tmp/example.clap", "dev.nilrack.example", "Example"
     )
+    var ops = PluginRuntimeOps(process: testProcess)
     runtimes.runtimes[0] = PluginRuntimeRef(
-      pluginId: pluginId,
-      runtime: cast[pointer](1),
-      ops: cast[ptr PluginRuntimeOps](1),
-      processBlock: testProcessBlock,
+      pluginId: pluginId, runtime: cast[pointer](1), ops: cast[pointer](addr ops)
     )
     runtimes.count = 1
 
@@ -157,7 +151,7 @@ suite "process plan audio":
     check plan.entries[0].nodeId == pluginNode
     check plan.entries[0].pluginId == pluginId
     check plan.entries[0].runtime == cast[pointer](1)
-    check plan.entries[0].processBlock == testProcessBlock
+    check plan.entries[0].ops == cast[pointer](addr ops)
     check plan.entries[0].ioMode == aimMonoLeftToStereo
     check plan.entries[0].active
 
@@ -176,11 +170,9 @@ suite "process plan audio":
       pluginNode, paClap, "/tmp/example.clap", "dev.nilrack.example", "Example"
     )
     model.nodes.mEntity(pluginNode).bypassed = true
+    var ops = PluginRuntimeOps(process: testProcess)
     runtimes.runtimes[0] = PluginRuntimeRef(
-      pluginId: pluginId,
-      runtime: cast[pointer](1),
-      ops: cast[ptr PluginRuntimeOps](1),
-      processBlock: testProcessBlock,
+      pluginId: pluginId, runtime: cast[pointer](1), ops: cast[pointer](addr ops)
     )
     runtimes.count = 1
 

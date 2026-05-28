@@ -1,6 +1,7 @@
 import std/[math, options, tables]
 
 import ../types/core
+import ../key_ops
 import ../state/[entity_manager, id_gen, model]
 
 proc paramCreate*(

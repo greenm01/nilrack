@@ -1,4 +1,5 @@
 import ../types/[audio_values, core]
+import ../key_ops
 import audio_feedback
 import callback_diagnostics
 import process_plan_targets

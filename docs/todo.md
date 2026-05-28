@@ -93,6 +93,8 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
   refresh, overflow, and state dirty
 
 **Plugin runtime boundary**
+- [x] Data/code boundary guard: `src/types` contains passive data only; code,
+  proc aliases, and runtime call tables live outside `types/`
 - [x] `PluginRuntimeOps` uses fixed-layout records only: no `seq`, closures,
   `ref` objects, or exceptions across the boundary
 - [x] `ProcessContext` bus and event slices match the IPC-friendly shape in
@@ -101,7 +103,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
   state-dirty callbacks are flag-setting or bounded-record writes
 - [x] CLAP fd and timer extension events route to UI or plugin-event thread,
   never the audio callback
-- [ ] Published `ProcessPlan` execution calls `PluginRuntimeOps.process` with a
+- [x] Published `ProcessPlan` execution calls `PluginRuntimeOps.process` with a
   `ProcessContext`; remove the legacy `processBlock` shortcut without putting
   executable adapter logic in `types/`
 - [ ] Shared non-realtime state ops (`saveState`, `loadState`) live on the

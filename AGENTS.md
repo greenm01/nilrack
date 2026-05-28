@@ -59,6 +59,9 @@ object graph on the side.
 When changing runtime, state, graph, plugin, renderer, UI, or session code:
 
 1. Define passive records in `src/types`.
+   Do not put procs, proc aliases, helpers, or runtime call tables in
+   `src/types`; keep code in state, entity, system, audio, plugin, or renderer
+   modules.
 2. Store long-lived entities in dense tables under the model.
 3. Use typed logical IDs. ID `0` is null.
 4. Maintain relationship indexes in operation modules, not in systems or

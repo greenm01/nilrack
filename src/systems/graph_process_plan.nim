@@ -1,6 +1,8 @@
 import std/options
 
 import ../plugins/clap_host
+import ../plugins/plugin_runtime_api
+import ../key_ops
 import ../state/[iterators, model, queries]
 import ../types/[audio_values, core, plugin_values]
 import ../types/plugin_runtime_values
@@ -149,7 +151,7 @@ proc buildProcessPlanFromCompiledGraph*(
     if pluginId.isNone:
       continue
     let runtime = runtimes.runtimeForPlugin(pluginId.get)
-    if runtime.runtime.isNil or runtime.processBlock.isNil:
+    if not runtime.hasRuntimeProcess:
       continue
     let mode = m.audioIoModeForNode(nodeId)
     discard result.addProcessEntry(
@@ -157,7 +159,7 @@ proc buildProcessPlanFromCompiledGraph*(
         nodeId: nodeId,
         pluginId: pluginId.get,
         runtime: runtime.runtime,
-        processBlock: runtime.processBlock,
+        ops: runtime.ops,
         ioMode: mode,
         active: mode != aimBypass and not node.get.bypassed and not node.get.muted,
       )
@@ -171,12 +173,13 @@ proc buildSingleClapProcessPlan*(
 ): ProcessPlan =
   discard result.addPlanNode(nodeId)
   let mode = audioIoModeFor(descriptor)
+  let runtime = loaded.clapPluginRuntimeRef(pluginId)
   discard result.addProcessEntry(
     AudioProcessEntry(
       nodeId: nodeId,
       pluginId: pluginId,
       runtime: loaded.clapRuntimePointer(),
-      processBlock: clapProcessAudioBlock,
+      ops: runtime.ops,
       ioMode: mode,
       active: mode != aimBypass,
     )

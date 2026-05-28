@@ -1,4 +1,3 @@
-import std/hashes
 import core
 
 type
@@ -121,15 +120,3 @@ type
   ExternalParamKey* = object
     pluginId*: PluginId
     index*: uint32
-
-proc `==`*(a, b: ExternalPortKey): bool =
-  a.pluginId == b.pluginId and a.index == b.index
-
-proc `==`*(a, b: ExternalParamKey): bool =
-  a.pluginId == b.pluginId and a.index == b.index
-
-proc hash*(k: ExternalPortKey): Hash =
-  hash((uint32(k.pluginId), k.index))
-
-proc hash*(k: ExternalParamKey): Hash =
-  hash((uint32(k.pluginId), k.index))

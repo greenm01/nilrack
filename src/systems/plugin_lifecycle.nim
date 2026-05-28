@@ -1,4 +1,6 @@
 import ../plugins/clap_host
+import ../plugins/plugin_runtime_api
+import ../key_ops
 import ../types/[core, plugin_runtime_values, plugin_values]
 
 type PluginLifecycleResult* = object
@@ -21,8 +23,7 @@ proc runtimeForPlugin*(
   addr store.runtimes[index]
 
 proc addPluginRuntime*(store: var PluginRuntimeStore, runtime: PluginRuntimeRef): bool =
-  if runtime.pluginId == NullPluginId or runtime.runtime.isNil or runtime.ops.isNil or
-      runtime.processBlock.isNil:
+  if runtime.pluginId == NullPluginId or not runtime.hasRuntimeProcess:
     return false
   let existing = store.findRuntimeIndex(runtime.pluginId)
   if existing >= 0:
@@ -55,8 +56,9 @@ proc retirePluginRuntime*(
   true
 
 proc destroyPluginRuntime*(runtime: PluginRuntimeRef) =
-  if not runtime.ops.isNil and not runtime.ops.destroy.isNil:
-    runtime.ops.destroy(runtime.runtime)
+  let ops = runtime.runtimeOps()
+  if not ops.isNil and not ops.destroy.isNil:
+    ops.destroy(runtime.runtime)
 
 proc loadClapRuntime*(
     store: var PluginRuntimeStore, pluginId: PluginId, pluginPath: string
@@ -79,30 +81,42 @@ proc activatePluginRuntime*(
     minFrames, maxFrames: uint32,
 ): PluginRuntimeStatus =
   let runtime = store.runtimeForPlugin(pluginId)
-  if runtime.isNil or runtime.ops.isNil or runtime.ops.activate.isNil:
+  if runtime.isNil:
     return prsFailed
-  runtime.ops.activate(runtime.runtime, sampleRate, minFrames, maxFrames)
+  let ops = runtime[].runtimeOps()
+  if ops.isNil or ops.activate.isNil:
+    return prsFailed
+  ops.activate(runtime.runtime, sampleRate, minFrames, maxFrames)
 
 proc startPluginRuntimeProcessing*(
     store: var PluginRuntimeStore, pluginId: PluginId
 ): PluginRuntimeStatus =
   let runtime = store.runtimeForPlugin(pluginId)
-  if runtime.isNil or runtime.ops.isNil or runtime.ops.startProcessing.isNil:
+  if runtime.isNil:
     return prsFailed
-  runtime.ops.startProcessing(runtime.runtime)
+  let ops = runtime[].runtimeOps()
+  if ops.isNil or ops.startProcessing.isNil:
+    return prsFailed
+  ops.startProcessing(runtime.runtime)
 
 proc stopPluginRuntimeProcessing*(
     store: var PluginRuntimeStore, pluginId: PluginId
 ): PluginRuntimeStatus =
   let runtime = store.runtimeForPlugin(pluginId)
-  if runtime.isNil or runtime.ops.isNil or runtime.ops.stopProcessing.isNil:
+  if runtime.isNil:
     return prsFailed
-  runtime.ops.stopProcessing(runtime.runtime)
+  let ops = runtime[].runtimeOps()
+  if ops.isNil or ops.stopProcessing.isNil:
+    return prsFailed
+  ops.stopProcessing(runtime.runtime)
 
 proc deactivatePluginRuntime*(
     store: var PluginRuntimeStore, pluginId: PluginId
 ): PluginRuntimeStatus =
   let runtime = store.runtimeForPlugin(pluginId)
-  if runtime.isNil or runtime.ops.isNil or runtime.ops.deactivate.isNil:
+  if runtime.isNil:
     return prsFailed
-  runtime.ops.deactivate(runtime.runtime)
+  let ops = runtime[].runtimeOps()
+  if ops.isNil or ops.deactivate.isNil:
+    return prsFailed
+  ops.deactivate(runtime.runtime)

@@ -1,7 +1,9 @@
 import std/[options, tables]
 
+import ../key_ops
 import ../state/[iterators, model, queries]
 import ../types/[audio_values, core, graph_values, plugin_runtime_values]
+import ../plugins/plugin_runtime_api
 import graph_process_plan
 
 proc initGraphCompileReport*(rackId: RackId): GraphCompileReport =
@@ -87,8 +89,7 @@ proc setCompiledPlan*(report: var GraphCompileReport, plan: ProcessPlan) =
 proc hasPluginRuntime(store: PluginRuntimeStore, pluginId: PluginId): bool =
   for i in 0 ..< store.count.int:
     let runtime = store.runtimes[i]
-    if runtime.pluginId == pluginId and not runtime.runtime.isNil and
-        not runtime.ops.isNil and not runtime.processBlock.isNil:
+    if runtime.pluginId == pluginId and runtime.hasRuntimeProcess:
       return true
   false
 

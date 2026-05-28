@@ -1,5 +1,6 @@
 import std/[dynlib, os, strformat, strutils]
 
+import plugin_runtime_api
 import ../types/audio_values
 import ../types/[core, model, plugin_runtime_values, plugin_values]
 import clap_api
@@ -461,8 +462,7 @@ proc clapPluginRuntimeRef*(
   PluginRuntimeRef(
     pluginId: pluginId,
     runtime: loaded.clapRuntimePointer(),
-    ops: addr clapRuntimeOps,
-    processBlock: clapProcessAudioBlock,
+    ops: cast[pointer](addr clapRuntimeOps),
   )
 
 proc processStatusOk(status: int32): bool =

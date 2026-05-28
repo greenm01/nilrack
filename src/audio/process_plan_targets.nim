@@ -1,4 +1,5 @@
 import ../types/[audio_values, core]
+import ../key_ops
 
 proc hasLivePluginTarget*(plan: ptr ProcessPlan, pluginId: PluginId): bool =
   if plan.isNil or pluginId == NullPluginId:

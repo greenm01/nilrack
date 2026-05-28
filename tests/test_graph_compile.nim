@@ -1,20 +1,16 @@
 import std/unittest
 
+import ../src/plugins/plugin_runtime_api
 import ../src/state/engine
 import ../src/systems/graph_compile
 import ../src/types/[audio_values, core, graph_values, plugin_runtime_values]
 
-proc testProcessBlock(
-    runtime: pointer, in1, in2, out1, out2: pointer, nframes: uint32, mode: AudioIoMode
-): bool {.nimcall, gcsafe, raises: [].} =
+proc testProcess(
+    runtime: pointer, context: ptr ProcessContext
+): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
   discard runtime
-  discard in1
-  discard in2
-  discard out1
-  discard out2
-  discard nframes
-  discard mode
-  true
+  discard context
+  prsOk
 
 suite "graph compile errors":
   test "records compile errors as bounded UI data":
@@ -74,11 +70,9 @@ suite "graph compile errors":
       pluginNode, paClap, "/tmp/example.clap", "dev.nilrack.example", "Example"
     )
     discard model.paramCreate(pluginNode, "Gain", 0.0, 1.0, 0.5)
+    var ops = PluginRuntimeOps(process: testProcess)
     runtimes.runtimes[0] = PluginRuntimeRef(
-      pluginId: pluginId,
-      runtime: cast[pointer](1),
-      ops: cast[ptr PluginRuntimeOps](1),
-      processBlock: testProcessBlock,
+      pluginId: pluginId, runtime: cast[pointer](1), ops: cast[pointer](addr ops)
     )
     runtimes.count = 1
 
