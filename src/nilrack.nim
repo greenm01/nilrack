@@ -5,6 +5,7 @@ import render/renderer
 import audio/backend_reconfiguration
 import audio/jack_backend
 import audio/process_callback
+import systems/action_log
 import systems/render_projection
 import systems/graph_process_plan
 import plugins/[clap_host, plugin_adapter]
@@ -95,6 +96,7 @@ when isMainModule:
     discard nilampUi.initNilampVst3Ui(app)
 
   var frame: NilDrawList
+  var committedActions: ActionLog
 
   while app.running:
     discard app.pollAndDispatch()
@@ -102,6 +104,7 @@ when isMainModule:
       nilampUi.pumpNilampVst3Ui()
     let msgs = app.drainMsgs()
     for msg in msgs:
+      discard committedActions.recordCommittedAction(msg)
       case msg.kind
       of msgResize:
         r.resizeRenderer(msg.resizeW.uint32, msg.resizeH.uint32)

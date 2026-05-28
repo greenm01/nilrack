@@ -103,7 +103,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
   never the audio callback
 
 **Update loop hooks**
-- [ ] Committed user action log hook in the `Msg` dispatch path for future undo
+- [x] Committed user action log hook in the `Msg` dispatch path for future undo
 - [ ] Effect routing for graph dirty, process-plan dirty, topology refresh,
   diagnostics dirty, and state dirty
 

@@ -1,6 +1,8 @@
 import core
 import diagnostic_values
 
+const MaxActionLogEntries* = 256
+
 type
   InputTargetEntry* = object
     id*: InputTargetId
@@ -43,3 +45,14 @@ type
       diagnostics*: RuntimeDiagnosticsSnapshot
     else:
       discard
+
+  ActionLogEntry* = object
+    generation*: uint64
+    msg*: Msg
+
+  ActionLog* = object
+    nextGeneration*: uint64
+    writeIndex*: uint32
+    count*: uint32
+    entries*: array[MaxActionLogEntries, ActionLogEntry]
+    overflowed*: bool
