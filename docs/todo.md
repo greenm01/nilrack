@@ -167,7 +167,7 @@ results. Show available plugins in a browser. See [plugins.md](plugins.md).
 
 - [x] `--scan-plugin <path>` mode in `nilrack.nim`: load plugin, write KDL to
   stdout, exit
-- [ ] `src/systems/plugin_scan.nim`: fork scanner helper, collect KDL output,
+- [x] `src/systems/plugin_scan.nim`: fork scanner helper, collect KDL output,
   enforce timeout, and collect exit status
 - [x] Scan result schema in KDL: path, mtime, descriptor, ports, params,
   UI caps, scan status, typed failure reason
