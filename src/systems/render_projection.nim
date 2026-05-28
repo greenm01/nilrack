@@ -4,6 +4,7 @@ import ../types/[core, render_values, ui_values]
 import ../state/engine
 import ../render/draw_list
 import param_mapping
+import plugin_browser
 import ui_geometry
 import ui_layout
 
@@ -24,6 +25,7 @@ proc addTarget(
     nodeId: NodeId,
     paramId: ParamId,
     rect: Rect,
+    browserFormatFilter: PluginBrowserFormatFilter = pbfAll,
 ) =
   targets.entries.add(
     InputTargetEntry(
@@ -31,6 +33,7 @@ proc addTarget(
       kind: kind,
       nodeId: nodeId,
       paramId: paramId,
+      browserFormatFilter: browserFormatFilter,
       x: rect.x,
       y: rect.y,
       w: rect.w,
@@ -38,7 +41,86 @@ proc addTarget(
     )
   )
 
-proc layoutHostIoNodes(list: var NilDrawList, model: NilrackModel) =
+proc layoutPluginBrowser(
+    list: var NilDrawList,
+    targets: var InputTargetList,
+    state: PluginBrowserState,
+    height: float32,
+) =
+  if not state.enabled:
+    return
+
+  let panelBg = Color(r: 0.12, g: 0.13, b: 0.14, a: 1.0)
+  let header = Color(r: 0.18, g: 0.20, b: 0.22, a: 1.0)
+  let rowBg = Color(r: 0.15, g: 0.16, b: 0.17, a: 1.0)
+  let active = Color(r: 0.30, g: 0.44, b: 0.54, a: 1.0)
+  let inactive = Color(r: 0.20, g: 0.22, b: 0.24, a: 1.0)
+  let text = Color(r: 0.86, g: 0.89, b: 0.91, a: 1.0)
+  let muted = Color(r: 0.58, g: 0.63, b: 0.66, a: 1.0)
+  let line = Color(r: 0.28, g: 0.31, b: 0.33, a: 1.0)
+
+  list.addRect(0, 0, PluginBrowserPanelWidth, height, panelBg)
+  targets.addTarget(
+    itkPluginBrowserPanel,
+    NullNodeId,
+    NullParamId,
+    Rect(x: 0, y: 0, w: PluginBrowserPanelWidth, h: height),
+  )
+  list.addRect(0, 0, PluginBrowserPanelWidth, 48.0'f32, header)
+  list.addTextRun(14.0'f32, 14.0'f32, "Plugins", text)
+
+  let filters = [pbfAll, pbfClap, pbfLv2, pbfVst3]
+  let buttonW = 62.0'f32
+  for i, filter in filters:
+    let rect = Rect(
+      x: 12.0'f32 + i.float32 * (buttonW + 6.0'f32),
+      y: 42.0'f32,
+      w: buttonW,
+      h: 20.0'f32,
+    )
+    let color = if filter == state.formatFilter: active else: inactive
+    list.addRect(rect.x, rect.y, rect.w, rect.h, color)
+    list.addTextRun(
+      rect.x + 8.0'f32, rect.y + 5.0'f32, filter.pluginBrowserFormatLabel(), text
+    )
+    targets.addTarget(itkPluginBrowserFormat, NullNodeId, NullParamId, rect, filter)
+
+  let entries = state.filteredPluginBrowserEntries()
+  if not state.cachePresent:
+    list.addTextRun(14.0'f32, 92.0'f32, "No scan cache", muted)
+  elif state.entries.len == 0:
+    list.addTextRun(14.0'f32, 92.0'f32, "No plugins", muted)
+  elif entries.len == 0:
+    list.addTextRun(14.0'f32, 92.0'f32, "No matches", muted)
+  else:
+    let visibleRows =
+      max(0, int((height - PluginBrowserHeaderHeight) / PluginBrowserRowHeight))
+    let start = min(state.scrollOffset, max(0, entries.len - 1))
+    let stop = min(entries.len, start + visibleRows)
+    for idx in start ..< stop:
+      let entry = entries[idx]
+      let y = PluginBrowserHeaderHeight + (idx - start).float32 * PluginBrowserRowHeight
+      list.addRect(
+        8.0'f32, y + 4.0'f32, PluginBrowserPanelWidth - 16.0'f32, 38.0'f32, rowBg
+      )
+      list.addTextRun(16.0'f32, y + 10.0'f32, shortText(entry.name, 26), text)
+      let meta =
+        entry.api.pluginApiLabel() & "  " & $entry.audioInputCount & " in / " &
+        $entry.audioOutputCount & " out / " & $entry.paramCount & " params"
+      list.addTextRun(16.0'f32, y + 27.0'f32, shortText(meta, 34), muted)
+      if entry.vendor.len > 0:
+        list.addTextRun(
+          PluginBrowserPanelWidth - 86.0'f32,
+          y + 10.0'f32,
+          shortText(entry.vendor, 10),
+          muted,
+        )
+
+  list.addRect(PluginBrowserPanelWidth - 1.0'f32, 0, 1.0'f32, height, line)
+
+proc layoutHostIoNodes(
+    list: var NilDrawList, model: NilrackModel, canvasOffsetX: float32
+) =
   let inputPanel = Color(r: 0.16, g: 0.32, b: 0.26, a: 1.0)
   let outputPanel = Color(r: 0.36, g: 0.21, b: 0.24, a: 1.0)
   let hostBorder = Color(r: 0.62, g: 0.72, b: 0.68, a: 1.0)
@@ -50,7 +132,7 @@ proc layoutHostIoNodes(list: var NilDrawList, model: NilrackModel) =
   for node in model.nodes.data:
     if node.kind == nkPlugin:
       continue
-    let x = node.x
+    let x = node.x + canvasOffsetX
     let y = node.y
     let w = if node.w > 0.0'f32: node.w else: 240.0'f32
     let h = if node.h > 0.0'f32: node.h else: 96.0'f32
@@ -88,7 +170,10 @@ proc layoutHostIoNodes(list: var NilDrawList, model: NilrackModel) =
         )
 
 proc layoutPluginNodes(
-    list: var NilDrawList, targets: var InputTargetList, model: NilrackModel
+    list: var NilDrawList,
+    targets: var InputTargetList,
+    model: NilrackModel,
+    canvasOffsetX: float32,
 ) =
   let panel = Color(r: 0.16, g: 0.17, b: 0.18, a: 1.0)
   let header = Color(r: 0.20, g: 0.22, b: 0.24, a: 1.0)
@@ -102,7 +187,9 @@ proc layoutPluginNodes(
   let bypassOn = Color(r: 0.62, g: 0.30, b: 0.26, a: 1.0)
 
   for node in model.pluginNodes:
-    let x = node.x
+    var screenNode = node
+    screenNode.x += canvasOffsetX
+    let x = screenNode.x
     let y = node.y
     let w = if node.w > 0.0'f32: node.w else: 320.0'f32
     let h = if node.h > 0.0'f32: node.h else: 180.0'f32
@@ -111,7 +198,7 @@ proc layoutPluginNodes(
     list.addRect(x, y, w, 30.0'f32, header)
     list.addTextRun(x + 12.0'f32, y + 8.0'f32, shortText(node.name, 28), text)
 
-    let bypassRect = node.pluginBypassToggleRect()
+    let bypassRect = screenNode.pluginBypassToggleRect()
     targets.addTarget(itkNodeBypass, node.id, NullParamId, bypassRect)
     let bypassColor = if node.bypassed: bypassOn else: bypassOff
     list.addRect(bypassRect.x, bypassRect.y, bypassRect.w, bypassRect.h, bypassColor)
@@ -160,7 +247,7 @@ proc layoutPluginNodes(
           p.name
       list.addTextRun(x + 14.0'f32, rowY, shortText(label, 20), text)
       let sx = x + 170.0'f32
-      let slider = node.paramSliderRect(visibleParam)
+      let slider = screenNode.paramSliderRect(visibleParam)
       targets.addTarget(itkParamSlider, node.id, paramId, slider)
       let normalized = p.normalizedParamValue()
       list.addRect(slider.x, slider.y, slider.w, slider.h, sliderBg)
@@ -182,6 +269,9 @@ proc project*(
 ) =
   list.clear()
   targets.clearTargets()
-  list.layoutShell(width, height, meterIn, meterOut)
-  list.layoutHostIoNodes(model)
-  list.layoutPluginNodes(targets, model)
+  let canvasOffsetX =
+    if model.pluginBrowser.enabled: PluginBrowserPanelWidth else: 0.0'f32
+  list.layoutShell(width, height, meterIn, meterOut, canvasOffsetX)
+  list.layoutHostIoNodes(model, canvasOffsetX)
+  list.layoutPluginNodes(targets, model, canvasOffsetX)
+  list.layoutPluginBrowser(targets, model.pluginBrowser, height)

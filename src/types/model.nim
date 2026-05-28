@@ -27,6 +27,12 @@ type
     paLv2
     paVst3
 
+  PluginBrowserFormatFilter* = enum
+    pbfAll
+    pbfClap
+    pbfLv2
+    pbfVst3
+
   StateBlobRef* = object
     data*: seq[byte]
 
@@ -112,10 +118,31 @@ type
     id*: PluginUiId
     pluginId*: PluginId
 
+  PluginBrowserEntry* = object
+    api*: PluginApi
+    path*: string
+    name*: string
+    vendor*: string
+    version*: string
+    audioInputCount*: uint32
+    audioOutputCount*: uint32
+    paramCount*: uint32
+
+  PluginBrowserState* = object
+    enabled*: bool
+    cachePath*: string
+    cachePresent*: bool
+    nameFilter*: string
+    formatFilter*: PluginBrowserFormatFilter
+    scrollOffset*: int
+    entries*: seq[PluginBrowserEntry]
+
   InputTargetKind* = enum
     itkNone
     itkNodeBypass
     itkParamSlider
+    itkPluginBrowserPanel
+    itkPluginBrowserFormat
 
   RenderSurfaceData* = object
     id*: RenderSurfaceId

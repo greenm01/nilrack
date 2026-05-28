@@ -30,3 +30,5 @@ type NilrackModel* = object
   portByExternalKey*: Table[ExternalPortKey, PortId]
   paramByExternalKey*: Table[ExternalParamKey, ParamId]
   inputTargetByNode*: Table[NodeId, InputTargetId]
+
+  pluginBrowser*: PluginBrowserState

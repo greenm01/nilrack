@@ -188,7 +188,13 @@ proc onPointerAxis(
 ) =
   let app = cast[ptr WaylandApp](data)
   app.pendingMsgs.add(
-    Msg(kind: msgPointerScroll, scrollAxis: axis, scrollValue: fixedToFloat(value))
+    Msg(
+      kind: msgPointerScroll,
+      scrollAxis: axis,
+      scrollValue: fixedToFloat(value),
+      scrollX: app.pointerX,
+      scrollY: app.pointerY,
+    )
   )
 
 proc onPointerFrame(data: pointer, pointer: ptr Pointer) =

@@ -197,7 +197,7 @@ editors. Generated controls are the required plugin UI for this phase; native
 Wayland and XWayland editors remain later phases.
 
 - [x] JACK input and output nodes visible on the rack canvas
-- [ ] Plugin browser UI from scan cache: list scanned plugins, filter by format
+- [x] Plugin browser UI from scan cache: list scanned plugins, filter by format
   and name
 - [ ] Add or drag a CLAP plugin from the browser to the rack canvas
 - [ ] Rack canvas pan and zoom

@@ -4,6 +4,7 @@ import ../state/engine
 import action_log
 import effect_queue
 import param_mapping
+import plugin_browser
 import ui_hit_test
 
 const MaxUpdateCommands* = 64
@@ -52,6 +53,12 @@ proc popUpdateCommand*(
   dec queue.count
   true
 
+proc pluginBrowserPanelHeight(targets: InputTargetList): float32 =
+  for target in targets.entries:
+    if target.kind == itkPluginBrowserPanel:
+      return target.h
+  0.0'f32
+
 proc dispatchMsg*(
     model: var NilrackModel,
     committedActions: var ActionLog,
@@ -74,7 +81,9 @@ proc dispatchMsg*(
     if not msg.btnPressed:
       return
     let target = targets.targetAt(msg.btnX, msg.btnY)
-    if target.isSome and target.get.kind == itkParamSlider:
+    if target.isSome and target.get.kind == itkPluginBrowserFormat:
+      model.pluginBrowser.setPluginBrowserFormat(target.get.browserFormatFilter)
+    elif target.isSome and target.get.kind == itkParamSlider:
       let paramId = target.get.paramId
       let normalized =
         if target.get.w <= 0.0'f32:
@@ -98,5 +107,21 @@ proc dispatchMsg*(
       model.nodeToggleBypass(target.get.nodeId)
       discard effects.enqueueProcessPlanDirty(NullRackId)
       discard commands.pushUpdateCommand(UpdateCommand(kind: uckPublishProcessPlan))
+  of msgPointerScroll:
+    let target = targets.targetAt(msg.scrollX, msg.scrollY)
+    if target.isSome and (
+      target.get.kind == itkPluginBrowserPanel or
+      target.get.kind == itkPluginBrowserFormat
+    ):
+      let deltaRows =
+        if msg.scrollValue > 0.0'f32:
+          1
+        elif msg.scrollValue < 0.0'f32:
+          -1
+        else:
+          0
+      model.pluginBrowser.scrollPluginBrowser(
+        deltaRows, targets.pluginBrowserPanelHeight()
+      )
   else:
     discard

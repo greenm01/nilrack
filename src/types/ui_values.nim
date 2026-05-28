@@ -10,6 +10,7 @@ type
     kind*: InputTargetKind
     nodeId*: NodeId
     paramId*: ParamId
+    browserFormatFilter*: PluginBrowserFormatFilter
     x*, y*, w*, h*: float32
 
   InputTargetList* = object
@@ -47,6 +48,7 @@ type
     of msgPointerScroll:
       scrollAxis*: uint32
       scrollValue*: float32
+      scrollX*, scrollY*: float32
     of msgKeyPress, msgKeyRelease:
       keyCode*: uint32
     of msgResize:

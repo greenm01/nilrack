@@ -121,3 +121,91 @@ suite "update dispatch":
     var effect: Effect
     check effects.popEffect(effect)
     check effect.kind == ekProcessPlanDirty
+
+  test "plugin browser format click changes filter":
+    var model = NilrackModel()
+    model.pluginBrowser = PluginBrowserState(enabled: true, cachePresent: true)
+    var actions: ActionLog
+    var effects: EffectQueue
+    var commands: UpdateCommandQueue
+    var frame: NilDrawList
+    var targets: InputTargetList
+    frame.project(targets, model, 800.0'f32, 600.0'f32, 0.0'f32, 0.0'f32)
+
+    var clapTarget: InputTargetEntry
+    var found = false
+    for target in targets.entries:
+      if target.kind == itkPluginBrowserFormat and target.browserFormatFilter == pbfClap:
+        clapTarget = target
+        found = true
+    check found
+
+    model.dispatchMsg(
+      actions,
+      effects,
+      commands,
+      targets,
+      Msg(
+        kind: msgPointerButton,
+        btnButton: 1,
+        btnPressed: true,
+        btnX: clapTarget.x + 1.0'f32,
+        btnY: clapTarget.y + 1.0'f32,
+      ),
+    )
+
+    check model.pluginBrowser.formatFilter == pbfClap
+
+  test "plugin browser scroll clamps visible entries":
+    var model = NilrackModel()
+    model.pluginBrowser = PluginBrowserState(
+      enabled: true,
+      cachePresent: true,
+      entries:
+        @[
+          PluginBrowserEntry(api: paClap, name: "A"),
+          PluginBrowserEntry(api: paClap, name: "B"),
+          PluginBrowserEntry(api: paClap, name: "C"),
+          PluginBrowserEntry(api: paClap, name: "D"),
+          PluginBrowserEntry(api: paClap, name: "E"),
+        ],
+    )
+    var actions: ActionLog
+    var effects: EffectQueue
+    var commands: UpdateCommandQueue
+    var frame: NilDrawList
+    var targets: InputTargetList
+    frame.project(targets, model, 800.0'f32, 160.0'f32, 0.0'f32, 0.0'f32)
+
+    for i in 0 ..< 10:
+      model.dispatchMsg(
+        actions,
+        effects,
+        commands,
+        targets,
+        Msg(
+          kind: msgPointerScroll,
+          scrollAxis: 0,
+          scrollValue: 1.0'f32,
+          scrollX: 20.0'f32,
+          scrollY: 100.0'f32,
+        ),
+      )
+
+    check model.pluginBrowser.scrollOffset == 3
+
+    model.dispatchMsg(
+      actions,
+      effects,
+      commands,
+      targets,
+      Msg(
+        kind: msgPointerScroll,
+        scrollAxis: 0,
+        scrollValue: -1.0'f32,
+        scrollX: 20.0'f32,
+        scrollY: 100.0'f32,
+      ),
+    )
+
+    check model.pluginBrowser.scrollOffset == 2

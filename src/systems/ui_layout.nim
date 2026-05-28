@@ -2,7 +2,11 @@ import ../types/[core, render_values]
 import ../render/draw_list
 
 proc layoutShell*(
-    list: var NilDrawList, width, height: float32, meterIn: float32, meterOut: float32
+    list: var NilDrawList,
+    width, height: float32,
+    meterIn: float32,
+    meterOut: float32,
+    contentOffsetX: float32 = 0.0'f32,
 ) =
   let stripH = height * 0.08
   let canvasH = height - stripH
@@ -10,7 +14,10 @@ proc layoutShell*(
   list.addRect(0, 0, width, canvasH, Color(r: 0.10, g: 0.10, b: 0.10, a: 1.0))
   list.addRect(0, canvasH, width, stripH, Color(r: 0.14, g: 0.14, b: 0.14, a: 1.0))
   list.addTextRun(
-    12.0'f32, 12.0'f32, "nilrack", Color(r: 0.82, g: 0.86, b: 0.90, a: 1.0)
+    contentOffsetX + 12.0'f32,
+    12.0'f32,
+    "nilrack",
+    Color(r: 0.82, g: 0.86, b: 0.90, a: 1.0),
   )
 
   let meterW = 6.0'f32

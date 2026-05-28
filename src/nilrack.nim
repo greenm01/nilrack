@@ -9,6 +9,7 @@ import audio/process_callback
 import audio/process_plan_store
 import systems/effect_queue
 import systems/graph_compile
+import systems/plugin_browser
 import systems/plugin_scan
 import systems/render_projection
 import systems/graph_process_plan
@@ -20,11 +21,14 @@ import plugins/vst3_host
 type AppArgs = object
   clapPath: string
   scanPluginPath: string
+  scanCachePath: string
+  pluginFilter: string
   vst3UiSpike: bool
 
 proc printUsage() =
   stderr.writeLine(
-    "usage: nilrack [--clap <path>] [--vst3-ui-spike] [--scan-plugin <path>]"
+    "usage: nilrack [--clap <path>] [--vst3-ui-spike] " &
+      "[--scan-cache <path>] [--plugin-filter <text>] [--scan-plugin <path>]"
   )
 
 proc parseArgs(): AppArgs =
@@ -44,6 +48,18 @@ proc parseArgs(): AppArgs =
         printUsage()
         quit(1)
       result.scanPluginPath = paramStr(i)
+    of "--scan-cache":
+      inc i
+      if i > paramCount():
+        printUsage()
+        quit(1)
+      result.scanCachePath = paramStr(i)
+    of "--plugin-filter":
+      inc i
+      if i > paramCount():
+        printUsage()
+        quit(1)
+      result.pluginFilter = paramStr(i)
     of "--vst3-ui-spike":
       result.vst3UiSpike = true
     of "--help", "-h":
@@ -58,7 +74,10 @@ proc parseArgs(): AppArgs =
   if result.clapPath.len > 0 and result.vst3UiSpike:
     stderr.writeLine("nilrack: --clap and --vst3-ui-spike are separate smoke paths")
     quit(1)
-  if result.scanPluginPath.len > 0 and (result.clapPath.len > 0 or result.vst3UiSpike):
+  if result.scanPluginPath.len > 0 and (
+    result.clapPath.len > 0 or result.vst3UiSpike or result.scanCachePath.len > 0 or
+    result.pluginFilter.len > 0
+  ):
     stderr.writeLine("nilrack: --scan-plugin cannot be combined with live host modes")
     quit(1)
 
@@ -116,6 +135,8 @@ when isMainModule:
   var model = NilrackModel()
   let defaultRackId = model.firstRackIdOrCreateDefault()
   discard model.ensureRackAudioIoNodes(defaultRackId)
+  model.pluginBrowser = loadPluginBrowserEntries(args.scanCachePath)
+  model.pluginBrowser.nameFilter = args.pluginFilter
   if args.clapPath.len > 0:
     let clap = loadClapPlugin(args.clapPath)
     if not clap.ok:
