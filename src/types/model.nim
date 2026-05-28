@@ -55,15 +55,28 @@ type
     direction*: PortDirection
     channelIndex*: uint32
     name*: string
+    externalIndex*: uint32
+    externalId*: uint32
+    channelCount*: uint32
+    isMain*: bool
 
   ParamData* = object
     id*: ParamId
     nodeId*: NodeId
     name*: string
+    modulePath*: string
+    externalIndex*: uint32
+    externalId*: uint32
     minVal*: float64
     maxVal*: float64
     defaultVal*: float64
     currentVal*: float64
+    displayText*: string
+    stepped*: bool
+    hidden*: bool
+    readonly*: bool
+    bypass*: bool
+    automatable*: bool
 
   PluginData* = object
     id*: PluginId
@@ -72,6 +85,9 @@ type
     path*: string
     uri*: string
     displayName*: string
+    vendor*: string
+    version*: string
+    hasState*: bool
     stateRef*: StateBlobRef
 
   PluginUiData* = object

@@ -64,14 +64,19 @@ Load one CLAP plugin by path. Prove the plugin model, generated controls,
 parameter editing, and state persistence. See [architecture.md](architecture.md)
 milestone 2 and [plugins.md](plugins.md).
 
-- [ ] CLAP C bindings: host, factory, plugin instance, process, params, state
-- [ ] `src/plugins/clap_host.nim`: load plugin, activate, process, params, state
-- [ ] `src/plugins/plugin_adapter.nim`: translate CLAP data into internal model
+- [x] CLAP C bindings: entry, host, factory, plugin instance, audio ports,
+  params, state, process structs
+- [x] `src/plugins/clap_host.nim`: load plugin by path, instantiate, query
+  descriptor, ports, params, and state capability
+- [x] `src/plugins/plugin_adapter.nim`: translate CLAP metadata into internal model
+- [ ] `src/plugins/clap_host.nim`: activate and process through CLAP plugin
 - [ ] `src/systems/plugin_lifecycle.nim`: load, activate, deactivate, unload
 - [ ] `src/systems/graph_compile.nim`: compile rack graph to `ProcessPlan`
 - [ ] `src/systems/graph_process_plan.nim`: build process plan from compiled graph
-- [ ] Plugin node in rack UI: title bar, port slots, bypass toggle
-- [ ] Generated parameter controls: knob and slider widgets
+- [x] Plugin node in rack UI: title bar and port slots
+- [ ] Plugin node in rack UI: bypass toggle
+- [x] Generated parameter controls: display-only slider rows
+- [ ] Generated parameter controls: editable knob and slider widgets
 - [ ] `src/systems/param_mapping.nim`: normalized param value → draw + input target
 - [ ] Parameter edit queue: UI → audio thread via `rt_queue`
 - [ ] State save: plugin → `StateBlobRef` → KDL session file

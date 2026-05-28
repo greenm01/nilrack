@@ -1,7 +1,101 @@
-import ../types/render_values
+import std/[math, options]
+
+import ../types/[core, render_values]
 import ../state/engine
 import ../render/draw_list
 import ui_layout
+
+proc clamp01(value: float64): float32 =
+  if value.isNaN:
+    return 0.0'f32
+  max(0.0, min(1.0, value)).float32
+
+proc paramNorm(param: ParamData): float32 =
+  let span = param.maxVal - param.minVal
+  if span <= 0.0:
+    return 0.0'f32
+  clamp01((param.currentVal - param.minVal) / span)
+
+proc shortText(value: string, maxChars: int): string =
+  if value.len <= maxChars:
+    value
+  elif maxChars <= 3:
+    value[0 ..< maxChars]
+  else:
+    value[0 ..< maxChars - 3] & "..."
+
+proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
+  let panel = Color(r: 0.16, g: 0.17, b: 0.18, a: 1.0)
+  let header = Color(r: 0.20, g: 0.22, b: 0.24, a: 1.0)
+  let text = Color(r: 0.86, g: 0.89, b: 0.91, a: 1.0)
+  let mutedText = Color(r: 0.58, g: 0.63, b: 0.66, a: 1.0)
+  let portColor = Color(r: 0.28, g: 0.47, b: 0.62, a: 1.0)
+  let sliderBg = Color(r: 0.09, g: 0.10, b: 0.11, a: 1.0)
+  let sliderFill = Color(r: 0.42, g: 0.68, b: 0.38, a: 1.0)
+
+  for node in model.nodes.data:
+    if node.kind != nkPlugin:
+      continue
+
+    let x = node.x
+    let y = node.y
+    let w = if node.w > 0.0'f32: node.w else: 320.0'f32
+    let h = if node.h > 0.0'f32: node.h else: 180.0'f32
+
+    list.addRect(x, y, w, h, panel)
+    list.addRect(x, y, w, 30.0'f32, header)
+    list.addTextRun(x + 12.0'f32, y + 8.0'f32, shortText(node.name, 28), text)
+
+    let pluginId = model.pluginForNode(node.id)
+    if pluginId.isSome:
+      let plugin = model.plugins.entity(pluginId.get)
+      if plugin.isSome and plugin.get.version.len > 0:
+        list.addTextRun(
+          x + w - 74.0'f32, y + 8.0'f32, shortText(plugin.get.version, 10), mutedText
+        )
+
+    for portId in model.portsForNode(node.id):
+      let port = model.ports.entity(portId)
+      if port.isNone:
+        continue
+      let p = port.get
+      let py = y + 42.0'f32 + p.externalIndex.float32 * 18.0'f32
+      let px =
+        if p.direction == pdIn:
+          x + 8.0'f32
+        else:
+          x + w - 16.0'f32
+      list.addRect(px, py, 8.0'f32, 8.0'f32, portColor)
+      if p.direction == pdIn:
+        list.addTextRun(px + 14.0'f32, py - 3.0'f32, shortText(p.name, 12), mutedText)
+      else:
+        list.addTextRun(
+          x + w - 92.0'f32, py - 3.0'f32, shortText(p.name, 12), mutedText
+        )
+
+    var visibleParam = 0
+    for paramId in model.paramsForNode(node.id):
+      let param = model.params.entity(paramId)
+      if param.isNone or param.get.hidden:
+        continue
+      let p = param.get
+      let rowY = y + 82.0'f32 + visibleParam.float32 * 24.0'f32
+      if rowY + 18.0'f32 > y + h - 8.0'f32:
+        break
+      let label =
+        if p.modulePath.len > 0:
+          p.modulePath & "/" & p.name
+        else:
+          p.name
+      list.addTextRun(x + 14.0'f32, rowY, shortText(label, 20), text)
+      let sx = x + 170.0'f32
+      let sy = rowY + 3.0'f32
+      let sw = w - 190.0'f32
+      list.addRect(sx, sy, sw, 8.0'f32, sliderBg)
+      list.addRect(sx, sy, sw * paramNorm(p), 8.0'f32, sliderFill)
+      if p.displayText.len > 0:
+        list.addTextRun(sx, sy + 10.0'f32, shortText(p.displayText, 16), mutedText)
+      inc visibleParam
 
 proc project*(
     list: var NilDrawList,
@@ -11,3 +105,4 @@ proc project*(
 ) =
   list.clear()
   list.layoutShell(width, height, meterIn, meterOut)
+  list.layoutPluginNodes(model)

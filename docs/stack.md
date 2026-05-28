@@ -10,11 +10,12 @@ Wayland client binding for Nim. Same package used by Triad:
 protocol and live in `src/protocols/`. Wayland details stay in the platform
 layer; the rest of the app sees normalized input events.
 
-## wgpu-native
+## webgpu-nim + WGVK
 
-GPU renderer backend. C ABI. `NilDrawList` is the stable rendering model;
-`wgpu-native` is a backend detail. The draw list API must not leak wgpu types.
-A software debug backend stays possible by keeping draw commands renderer-agnostic.
+GPU renderer backend. `webgpu-nim` provides Nim WebGPU bindings and uses WGVK
+as its C/Vulkan backend. `NilDrawList` is the stable rendering model; WebGPU is
+a backend detail. The draw list API must not leak WebGPU types. A software
+debug backend stays possible by keeping draw commands renderer-agnostic.
 
 ## JACK
 
@@ -62,11 +63,11 @@ Owned project, available in nimble. KDL 2.0 parser and serializer for Nim.
 Used for session files and plugin scan cache. API: `parseKdl(string) → KdlDoc`,
 `encodeKdlDoc(obj) → KdlDoc`. See [session.md](session.md).
 
-## stb_truetype
+## Pixie + 0xProto
 
-Single C header. Rasterizes a TTF font into a glyph atlas on startup. Text
-runs in `NilDrawList` reference the atlas. No runtime dependency, no font
-rendering framework.
+Pixie rasterizes a vendored 0xProto TTF font into a glyph atlas on startup.
+Text runs in `NilDrawList` reference the atlas. The renderer owns only atlas
+upload and text quads.
 
 ## Janet
 

@@ -3,12 +3,26 @@ import ../types/core
 import ../state/[entity_manager, id_gen, model]
 
 proc pluginAttachToNode*(
-    m: var NilrackModel, nodeId: NodeId, api: PluginApi, path, uri, displayName: string
+    m: var NilrackModel,
+    nodeId: NodeId,
+    api: PluginApi,
+    path, uri, displayName: string,
+    vendor: string = "",
+    version: string = "",
+    hasState: bool = false,
 ): PluginId =
   let id = m.counters.generatePluginId()
   m.plugins.insert(
     PluginData(
-      id: id, nodeId: nodeId, api: api, path: path, uri: uri, displayName: displayName
+      id: id,
+      nodeId: nodeId,
+      api: api,
+      path: path,
+      uri: uri,
+      displayName: displayName,
+      vendor: vendor,
+      version: version,
+      hasState: hasState,
     )
   )
   m.pluginByNode[nodeId] = id

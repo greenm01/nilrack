@@ -14,6 +14,10 @@ proc portCreate*(
     direction: PortDirection,
     channelIndex: uint32,
     name: string,
+    externalIndex: uint32 = 0,
+    externalId: uint32 = 0,
+    channelCount: uint32 = 1,
+    isMain: bool = false,
 ): PortId =
   let id = m.counters.generatePortId()
   m.ports.insert(
@@ -24,6 +28,10 @@ proc portCreate*(
       direction: direction,
       channelIndex: channelIndex,
       name: name,
+      externalIndex: externalIndex,
+      externalId: externalId,
+      channelCount: channelCount,
+      isMain: isMain,
     )
   )
   m.portsByNode.mgetOrPut(nodeId, @[]).add(id)

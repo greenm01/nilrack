@@ -1,13 +1,59 @@
-import std/atomics
+import std/[atomics, os]
 import state/engine
 import platform/wayland_app
 import render/renderer
 import audio/jack_backend
 import audio/process_callback
 import systems/render_projection
+import plugins/[clap_host, plugin_adapter]
 import plugins/vst3_host
 
+type AppArgs = object
+  clapPath: string
+  vst3UiSpike: bool
+
+proc printUsage() =
+  stderr.writeLine("usage: nilrack [--clap <path>] [--vst3-ui-spike]")
+
+proc parseArgs(): AppArgs =
+  var i = 1
+  while i <= paramCount():
+    let arg = paramStr(i)
+    case arg
+    of "--clap":
+      inc i
+      if i > paramCount():
+        printUsage()
+        quit(1)
+      result.clapPath = paramStr(i)
+    of "--vst3-ui-spike":
+      result.vst3UiSpike = true
+    of "--help", "-h":
+      printUsage()
+      quit(0)
+    else:
+      stderr.writeLine("nilrack: unknown argument: " & arg)
+      printUsage()
+      quit(1)
+    inc i
+
+  if result.clapPath.len > 0 and result.vst3UiSpike:
+    stderr.writeLine("nilrack: --clap and --vst3-ui-spike are separate smoke paths")
+    quit(1)
+
 when isMainModule:
+  let args = parseArgs()
+
+  var activeClap: ClapLoadedPlugin
+  var model = NilrackModel()
+  if args.clapPath.len > 0:
+    let clap = loadClapPlugin(args.clapPath)
+    if not clap.ok:
+      stderr.writeLine("nilrack: " & clap.error)
+      quit(1)
+    activeClap = clap.plugin
+    discard model.attachPluginDescriptor(clap.descriptor)
+
   var app: WaylandApp
   initWaylandApp(app)
 
@@ -25,20 +71,22 @@ when isMainModule:
   activateJack(jack)
 
   var nilampUi: Vst3UiHost
-  discard nilampUi.initNilampVst3Ui(app)
+  if args.vst3UiSpike:
+    discard nilampUi.initNilampVst3Ui(app)
 
-  var model = NilrackModel()
   var frame: NilDrawList
 
   while app.running:
     discard app.pollAndDispatch()
-    nilampUi.pumpNilampVst3Ui()
+    if args.vst3UiSpike:
+      nilampUi.pumpNilampVst3Ui()
     let msgs = app.drainMsgs()
     for msg in msgs:
       case msg.kind
       of msgResize:
         r.resizeRenderer(msg.resizeW.uint32, msg.resizeH.uint32)
-        nilampUi.resizeNilampVst3Ui(msg.resizeW, msg.resizeH)
+        if args.vst3UiSpike:
+          nilampUi.resizeNilampVst3Ui(msg.resizeW, msg.resizeH)
       of msgKeyPress:
         if msg.keyCode == 1:
           app.running = false
@@ -51,6 +99,8 @@ when isMainModule:
 
   deactivateJack(jack)
   shutdownJackBackend(jack)
-  nilampUi.shutdownNilampVst3Ui()
+  if args.vst3UiSpike:
+    nilampUi.shutdownNilampVst3Ui()
+  activeClap.close()
   r.shutdownRenderer()
   shutdownWaylandApp(app)

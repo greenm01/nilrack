@@ -84,10 +84,10 @@ enter the update loop. There is no widget framework. See [ui.md](ui.md).
 
 ### Renderer
 
-The renderer consumes a `NilDrawList`. `wgpu-native` is the first backend, not
-the application rendering model. A software debug backend stays possible by
-keeping draw commands renderer-agnostic. See [ui.md](ui.md) for the draw
-command set.
+The renderer consumes a `NilDrawList`. `webgpu-nim` with WGVK is the first
+backend, not the application rendering model. A software debug backend stays
+possible by keeping draw commands renderer-agnostic. See [ui.md](ui.md) for
+the draw command set.
 
 ### Audio Engine
 
