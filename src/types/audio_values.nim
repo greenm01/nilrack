@@ -8,6 +8,7 @@ const
   MaxProcessPlanParamTargets* = 256
   MaxProcessPlanEventPortTargets* = 128
   MaxRetiredProcessPlans* = 64
+  MaxPluginParamEvents* = 256
 
 type
   AudioIoMode* = enum
@@ -88,6 +89,23 @@ type
     sampleRate*: Atomic[uint32]
     bufferSize*: Atomic[uint32]
 
+  PluginParamEventKind* = enum
+    ppekValue
+    ppekGestureBegin
+    ppekGestureEnd
+
+  PluginParamEvent* = object
+    kind*: PluginParamEventKind
+    pluginId*: PluginId
+    paramId*: ParamId
+    normalizedValue*: float64
+    sampleOffset*: uint32
+
+  RtQueue*[T; N: static int] = object
+    data*: array[N, T]
+    head*: Atomic[int]
+    tail*: Atomic[int]
+
   JackClientHandle* = distinct pointer
   JackPortHandle* = distinct pointer
 
@@ -102,11 +120,7 @@ type
     planSlot*: ProcessPlanSlot
     diagnostics*: AudioCallbackDiagnostics
     reconfiguration*: AudioReconfigurationState
+    paramEvents*: RtQueue[PluginParamEvent, MaxPluginParamEvents]
 
   MeterSnapshot* = object
     levels*: array[4, float32]
-
-  RtQueue*[T; N: static int] = object
-    data*: array[N, T]
-    head*: Atomic[int]
-    tail*: Atomic[int]
