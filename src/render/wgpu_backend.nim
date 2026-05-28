@@ -48,9 +48,12 @@ type
 
   QuadBatch = object
     vertices: seq[QuadVertex]
-    indices: seq[uint32]
-    rectIndexCount: uint32
-    textIndexCount: uint32
+    rectVertexCount: uint32
+    textVertexCount: uint32
+
+when defined(nilrackDebugRender):
+  var loggedFirstBatch = false
+  var loggedFirstPresent = false
 
 const
   RectShader = staticRead("shaders/rect.wgsl")
@@ -70,8 +73,7 @@ proc appendQuad(
 ) =
   if w <= 0 or h <= 0 or color.a <= 0:
     return
-  let base = batch.vertices.len.uint32
-  batch.vertices.add QuadVertex(
+  let topLeft = QuadVertex(
     x: backend.clipX(x),
     y: backend.clipY(y),
     u: u0,
@@ -81,7 +83,7 @@ proc appendQuad(
     b: color.b,
     a: color.a,
   )
-  batch.vertices.add QuadVertex(
+  let topRight = QuadVertex(
     x: backend.clipX(x + w),
     y: backend.clipY(y),
     u: u1,
@@ -91,7 +93,7 @@ proc appendQuad(
     b: color.b,
     a: color.a,
   )
-  batch.vertices.add QuadVertex(
+  let bottomRight = QuadVertex(
     x: backend.clipX(x + w),
     y: backend.clipY(y + h),
     u: u1,
@@ -101,7 +103,7 @@ proc appendQuad(
     b: color.b,
     a: color.a,
   )
-  batch.vertices.add QuadVertex(
+  let bottomLeft = QuadVertex(
     x: backend.clipX(x),
     y: backend.clipY(y + h),
     u: u0,
@@ -111,21 +113,21 @@ proc appendQuad(
     b: color.b,
     a: color.a,
   )
-  batch.indices.add base + 0
-  batch.indices.add base + 1
-  batch.indices.add base + 2
-  batch.indices.add base + 0
-  batch.indices.add base + 2
-  batch.indices.add base + 3
+  batch.vertices.add topLeft
+  batch.vertices.add topRight
+  batch.vertices.add bottomRight
+  batch.vertices.add topLeft
+  batch.vertices.add bottomRight
+  batch.vertices.add bottomLeft
 
 proc appendRect(batch: var QuadBatch, backend: WgpuBackend, cmd: NilDrawCmd) =
-  let before = batch.indices.len
+  let before = batch.vertices.len
   batch.appendQuad(backend, cmd.x, cmd.y, cmd.w, cmd.h, 0, 0, 1, 1, cmd.color)
-  batch.rectIndexCount += uint32(batch.indices.len - before)
+  batch.rectVertexCount += uint32(batch.vertices.len - before)
 
 proc appendText(batch: var QuadBatch, backend: WgpuBackend, cmd: NilDrawCmd) =
   var x = cmd.x
-  let before = batch.indices.len
+  let before = batch.vertices.len
   for rune in glyphRunes(cmd.text):
     let glyph = backend.textAtlas.glyphFor(rune)
     batch.appendQuad(
@@ -133,7 +135,7 @@ proc appendText(batch: var QuadBatch, backend: WgpuBackend, cmd: NilDrawCmd) =
       cmd.color,
     )
     x += glyph.advance
-  batch.textIndexCount += uint32(batch.indices.len - before)
+  batch.textVertexCount += uint32(batch.vertices.len - before)
 
 proc buildBatch(backend: WgpuBackend, drawList: NilDrawList): QuadBatch =
   for cmd in drawList.cmds:
@@ -419,20 +421,14 @@ proc ensureBuffer(
   currentSize = newSize
 
 proc uploadBatch(b: var WgpuBackend, batch: QuadBatch) =
-  if batch.vertices.len == 0 or batch.indices.len == 0:
+  if batch.vertices.len == 0:
     return
   let vertexBytes = uint64(batch.vertices.len * sizeof(QuadVertex))
-  let indexBytes = uint64(batch.indices.len * sizeof(uint32))
   b.dev().ensureBuffer(
     b.vertexBuffer, b.vertexBufferSize, vertexBytes, BufferUsage_Vertex,
     "nilrack vertex buffer",
   )
-  b.dev().ensureBuffer(
-    b.indexBuffer, b.indexBufferSize, indexBytes, BufferUsage_Index,
-    "nilrack index buffer",
-  )
   b.que().write(b.vbuf(), 0, batch.vertices[0].unsafeAddr, vertexBytes.csize_t)
-  b.que().write(b.ibuf(), 0, batch.indices[0].unsafeAddr, indexBytes.csize_t)
 
 proc initWgpuBackend*(
     b: var WgpuBackend, display, wlSurface: pointer, width, height: uint32
@@ -514,10 +510,26 @@ proc resizeWgpuBackend*(b: var WgpuBackend, width, height: uint32) =
 
 proc renderDrawList*(b: var WgpuBackend, drawList: NilDrawList) =
   let batch = b.buildBatch(drawList)
+  when defined(nilrackDebugRender):
+    if not loggedFirstBatch:
+      stderr.writeLine(
+        "render debug: size=" & $b.width & "x" & $b.height & " cmds=" &
+          $drawList.cmds.len & " vertices=" & $batch.vertices.len & " rectVertices=" &
+          $batch.rectVertexCount & " textVertices=" & $batch.textVertexCount
+      )
+      if batch.vertices.len > 0:
+        stderr.writeLine(
+          "render debug: first vertex x=" & $batch.vertices[0].x & " y=" &
+            $batch.vertices[0].y & " a=" & $batch.vertices[0].a
+        )
+      loggedFirstBatch = true
   b.uploadBatch(batch)
 
   var surfaceTex: SurfaceTexture
   b.surf().getCurrentTexture(surfaceTex.addr)
+  when defined(nilrackDebugRender):
+    if not loggedFirstPresent:
+      stderr.writeLine("render debug: surface status=" & $surfaceTex.status)
 
   case surfaceTex.status
   of SuccessOptimal, SuccessSuboptimal:
@@ -534,27 +546,28 @@ proc renderDrawList*(b: var WgpuBackend, drawList: NilDrawList) =
   let view = surfaceTex.texture.create(nil)
   let encoder = b.dev().create(vaddr CommandEncoderDescriptor())
 
+  when defined(nilrackDebugClear):
+    let clearColor = wgpu.Color(r: 0.55, g: 0.05, b: 0.12, a: 1.0)
+  else:
+    let clearColor = wgpu.Color(r: 0.10, g: 0.10, b: 0.10, a: 1.0)
+
   let renderPass = encoder.begin(
     vaddr RenderPassDescriptor(
       colorAttachmentCount: 1,
       colorAttachments: vaddr RenderPassColorAttachment(
-        view: view,
-        loadOp: Clear,
-        storeOp: Store,
-        clearValue: wgpu.Color(r: 0.10, g: 0.10, b: 0.10, a: 1.0),
+        view: view, loadOp: Clear, storeOp: Store, clearValue: clearColor
       ),
     )
   )
-  if batch.indices.len > 0:
+  if batch.vertices.len > 0:
     renderPass.setVertexBuffer(0, b.vbuf(), 0, b.vertexBufferSize)
-    renderPass.setIndexBuffer(b.ibuf(), IndexFormat.Uint32, 0, b.indexBufferSize)
-    if batch.rectIndexCount > 0:
+    if batch.rectVertexCount > 0:
       renderPass.set(b.rectPipe())
-      renderPass.drawIndexed(batch.rectIndexCount, 1, 0, 0, 0)
-    if batch.textIndexCount > 0:
+      renderPass.draw(batch.rectVertexCount, 1, 0, 0)
+    if batch.textVertexCount > 0:
       renderPass.set(b.textPipe())
       renderPass.set(0, b.atlasBg(), 0, nil)
-      renderPass.drawIndexed(batch.textIndexCount, 1, batch.rectIndexCount, 0, 0)
+      renderPass.draw(batch.textVertexCount, 1, batch.rectVertexCount, 0)
   renderPass.End()
   view.release()
 
@@ -563,7 +576,11 @@ proc renderDrawList*(b: var WgpuBackend, drawList: NilDrawList) =
   b.que().submit(1, cmdBuf.addr)
   cmdBuf.release()
 
-  discard b.surf().present()
+  let presentStatus = b.surf().present()
+  when defined(nilrackDebugRender):
+    if not loggedFirstPresent:
+      stderr.writeLine("render debug: present status=" & $presentStatus)
+      loggedFirstPresent = true
   surfaceTex.texture.release()
 
 proc renderClear*(b: var WgpuBackend) =

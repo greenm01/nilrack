@@ -373,14 +373,18 @@ proc initWaylandApp*(app: var WaylandApp, title: string = "nilrack") =
   while not app.configured:
     discard app.display.dispatch()
 
-  app.attachFallbackBuffer()
-  discard app.display.roundtrip()
-
   app.running = true
 
 proc pollAndDispatch*(app: var WaylandApp): bool =
-  if app.display.dispatch() < 0:
+  if app.display.dispatch_pending() < 0:
     return false
+  discard app.display.flush()
+
+  var fd = TPollfd(fd: app.display.get_fd(), events: POLLIN, revents: 0)
+  let ready = poll(addr fd, Tnfds(1), 16)
+  if ready > 0:
+    if app.display.dispatch() < 0:
+      return false
   true
 
 proc drainMsgs*(app: var WaylandApp): seq[Msg] =
