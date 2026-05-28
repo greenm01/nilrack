@@ -15,6 +15,7 @@ type WaylandApp* = object
   display*: ptr Display
   registry*: ptr Registry
   compositor*: ptr Compositor
+  subcompositor*: ptr Subcompositor
   wlShm*: ptr Shm
   xdgWmBase*: ptr XdgWmBase
   seat*: ptr Seat
@@ -57,6 +58,10 @@ proc onRegistryGlobal(
   if iface == "wl_compositor":
     app.compositor = cast[ptr Compositor](registry.`bind`(
       name, wl_compositor_interface.addr, min(version, 4'u32)
+    ))
+  elif iface == "wl_subcompositor":
+    app.subcompositor = cast[ptr Subcompositor](registry.`bind`(
+      name, wl_subcompositor_interface.addr, min(version, 1'u32)
     ))
   elif iface == "xdg_wm_base":
     app.xdgWmBase = cast[ptr XdgWmBase](registry.`bind`(
@@ -399,6 +404,8 @@ proc shutdownWaylandApp*(app: var WaylandApp) =
     app.xdgWmBase.destroy()
   if app.seat != nil:
     app.seat.release()
+  if app.subcompositor != nil:
+    app.subcompositor.destroy()
   if app.compositor != nil:
     app.compositor.destroy()
   if app.registry != nil:

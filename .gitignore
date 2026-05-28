@@ -9,6 +9,7 @@ dist/
 zig-cache/
 zig-out/
 /src/nilrack
+/nilrack
 
 *.a
 *.so

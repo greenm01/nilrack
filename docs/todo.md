@@ -79,6 +79,22 @@ milestone 2 and [plugins.md](plugins.md).
 
 ---
 
+## Spike — nilamp VST3 Wayland UI
+
+This pulls a narrow part of Phase 4 and Phase 6 forward. It proves nilamp's
+VST3 editor can render inside nilrack through wayembed before nilrack has a
+general plugin host.
+
+- [x] Thin C++ VST3 UI shim: load nilamp, create editor view, expose C ABI to Nim
+- [x] `src/plugins/vst3_host.nim`: optional dynlib wrapper for the shim
+- [ ] `src/embed/wayembed_host.nim`: move wayembed lifecycle out of the shim
+  after the proof works
+- [x] Strict VST3 Wayland path: parent surface proxy plus plugin-created
+  subsurface adoption
+- [x] Live smoke: nilrack window opens and nilamp editor appears on Wayland
+
+---
+
 ## Phase 3 — Plugin Scanner
 
 Scan CLAP, LV2, and VST3 directories without risking the host process. Cache
