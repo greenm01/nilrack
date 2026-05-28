@@ -6,6 +6,7 @@ import audio/backend_reconfiguration
 import audio/jack_backend
 import audio/process_callback
 import systems/action_log
+import systems/effect_queue
 import systems/render_projection
 import systems/graph_process_plan
 import plugins/[clap_host, plugin_adapter]
@@ -97,6 +98,7 @@ when isMainModule:
 
   var frame: NilDrawList
   var committedActions: ActionLog
+  var effects: EffectQueue
 
   while app.running:
     discard app.pollAndDispatch()
@@ -105,6 +107,7 @@ when isMainModule:
     let msgs = app.drainMsgs()
     for msg in msgs:
       discard committedActions.recordCommittedAction(msg)
+      discard effects.routeMsgEffects(msg)
       case msg.kind
       of msgResize:
         r.resizeRenderer(msg.resizeW.uint32, msg.resizeH.uint32)
