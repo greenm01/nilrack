@@ -38,9 +38,13 @@ The compiler should follow a fixed order:
 3. Reject feedback cycles for v1.
 4. Expand bus-level cables into channel edges.
 5. Sort nodes into process order.
-6. Assign buffer slots for host I/O, plugin I/O, mixes, and scratch space.
-7. Emit fixed ops: clear, copy, add, process, MIDI merge, bypass, mute, meter.
-8. Return a complete plan or a compile error snapshot.
+6. Read plugin latency reports and attach them to node records.
+7. Assign buffer slots for host I/O, plugin I/O, mixes, delay, and scratch
+   space.
+8. Emit fixed ops: clear, copy, add, process, MIDI merge, bypass, mute, meter,
+   and future delay once PDC exists.
+9. Build event target lookup tables for plugins, params, and ports.
+10. Return a complete plan or a compile error snapshot.
 
 Partial plans should not be published. If compile fails, keep the previous plan
 running and report the compile error to the UI.
@@ -67,6 +71,10 @@ V1 channel rules:
 - wider output to mono input rejects unless an explicit mapping exists;
 - other mismatches reject until advanced mapping exists.
 
+Explicit mapping is cable data. If a cable carries `crChannelMap`,
+`crSumToMono`, `crDropExtra`, or `crSelectChannel`, the compiler expands that
+policy into channel edges. The UI does not keep private mapping state.
+
 The plan stores channel edges and ops. It does not store the original cable as
 runtime routing work.
 
@@ -91,7 +99,9 @@ ops[]
 runtimeCount
 runtimes[]
 eventQueues
+eventTargets
 meterSlots
+latencyFrames
 diagnosticFlags
 ```
 
@@ -101,6 +111,7 @@ Ops are small records:
 clear buffer
 copy source buffer -> destination buffer
 add source buffer -> destination buffer
+delay source buffer -> destination buffer  # PDC phase
 merge MIDI source -> destination
 process plugin runtime
 bypass node
@@ -110,6 +121,35 @@ publish meter
 
 The callback walks `ops[]` in order. All pointer and buffer decisions are made
 before publication.
+
+## Event Target Lookup
+
+The plan owns the callback's event target truth. UI-to-audio queues may contain
+events for a previous plan after graph edits, plugin reload, or session restore.
+The callback validates each event against plan-local targets before applying it.
+
+Minimum lookup data:
+
+```text
+live PluginId set
+plugin ParamId ranges or pairs
+live event PortId set
+plan generation
+```
+
+Missing targets are dropped and recorded with a `staleEvent` diagnostic flag.
+The callback never consults `NilrackModel` for event routing.
+
+## Latency
+
+Adapters may report plugin latency. The compiler should carry that latency into
+`ProcessPlan` node metadata even before full plugin delay compensation exists.
+
+For v1, reported latency is diagnostic data. The compiler may warn that parallel
+paths are not compensated. The callback does not run graph analysis.
+
+Later PDC support should add an explicit `delay` op and plan-owned ring buffers.
+The compiler, not the callback, calculates which paths need delay before a mix.
 
 ## Bypass And Mute
 

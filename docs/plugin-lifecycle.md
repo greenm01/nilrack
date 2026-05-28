@@ -117,13 +117,45 @@ Session restore should use this order:
 1. Rebuild model records for racks, nodes, ports, params, and cables.
 2. Load and instantiate plugin runtimes.
 3. Apply plugin state blobs while the runtime is stopped.
-4. Activate runtimes for the current sample rate and block size.
-5. Compile and publish the first plan.
-6. Start audio processing.
+4. Apply explicit nilrack parameter values for tracked params.
+5. Activate runtimes for the current sample rate and block size.
+6. Compile and publish the first plan.
+7. Start audio processing.
+
+Blob restore happens before explicit parameter restore. The opaque plugin state
+may contain hidden format state, but nilrack parameter records are the session's
+visible truth for tracked params.
 
 If state restore fails, the runtime should report an adapter error and keep the
 model load failure visible to the UI. The callback should not participate in
 state restore.
+
+If state restore changes plugin ports, bus counts, or latency, the adapter must
+report that as a topology-change request. The runtime must not process with a
+layout that no longer matches the published plan.
+
+## Topology Change Requests
+
+Plugins and adapters may discover that the current port or bus layout is no
+longer valid. Common causes include preset load, VST3 bus activation changes,
+and plugin restart requests.
+
+The callback cannot resize buffers or rewrite bus bindings in place. The flow is
+fixed:
+
+1. The adapter marks the runtime as needing topology refresh and reports a
+   feedback flag or effect to the UI thread.
+2. The current `ProcessPlan` stays in force until replacement. The affected node
+   processes with the old layout only if the adapter says that is safe;
+   otherwise it is bypassed or silenced by plan policy.
+3. The UI thread re-queries descriptor, ports, params, latency, and state that
+   changed.
+4. Operations update `NilrackModel`.
+5. `graph_compile` builds a replacement `ProcessPlan`.
+6. The new plan is atomically published and the old plan retires by epoch.
+
+No plugin or adapter may mutate callback-visible bus counts, buffer arrays, or
+process structs outside plan publication.
 
 ## Error Handling
 
@@ -135,6 +167,7 @@ Plugin lifecycle errors cross as data:
 - process failed;
 - state save failed;
 - state restore failed;
+- topology refresh requested;
 - retire queue overflowed.
 
 Errors belong in snapshots or diagnostics queues. The callback only marks

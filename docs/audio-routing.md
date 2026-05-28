@@ -27,11 +27,18 @@ CableData
   srcPort
   dstPort
   kind
+  routePolicy
+  channelMapId
 ```
 
 A cable connects one output `PortId` to one input `PortId`. The cable does not
 store channel pointers, buffer slots, plugin handles, or process state. Those
 belong to compiled audio data.
+
+`routePolicy` and `channelMapId` are the model-owned record of user intent when
+a connection needs more than the default channel policy. The compiler validates
+and expands that data. It does not guess whether a stereo-to-mono cable should
+drop a channel, sum channels, or pick a specific source.
 
 The compile layer expands bus cables into channel-level routing:
 
@@ -111,8 +118,41 @@ Multiple cables into one input are allowed when the port kind matches. The
 compiler emits explicit sum operations. One output feeding many destinations
 reuses the source buffer and emits copy or add operations as needed.
 
+Explicit mapping policy belongs on the cable, not in transient UI state:
+
+```text
+CableRoutePolicy
+  crAuto
+  crChannelMap
+  crSumToMono
+  crDropExtra
+  crSelectChannel
+
+ChannelMapData
+  id
+  entries[]  # source channel -> destination channel with gain
+```
+
+The first implementation can keep only `crAuto`. When advanced mapping arrives,
+session load, graph compile, and UI inspectors all read the same data.
+
 Feedback cycles are rejected in v1. Later feedback support should be explicit,
 for example through a delay node or a dedicated feedback edge type.
+
+## Latency And Delay
+
+Plugins may report process latency. Full plugin delay compensation is deferred,
+but the model and plan should leave the hook clear:
+
+- adapters expose reported latency as runtime metadata;
+- graph compile records per-node latency in the plan or diagnostics;
+- the callback does not calculate path delay while processing;
+- a later plan op can implement a fixed delay line backed by plan-owned ring
+  buffers.
+
+When PDC is implemented, the compiler should calculate path latency and emit
+explicit delay ops on shorter paths before mix points. Delay buffers are plan
+resources. They are not allocated or resized by the callback.
 
 ## ProcessPlan Shape
 
@@ -120,9 +160,10 @@ for example through a delay node or a dedicated feedback edge type.
 
 - ordered node entries;
 - plugin runtime refs;
+- reported node latency and future delay buffers;
 - buffer slots for host, plugin, and mix buffers;
 - channel edges expanded from bus cables;
-- clear, copy, add, and process operations;
+- clear, copy, add, future delay, and process operations;
 - bypass and mute flags;
 - meter output slots.
 

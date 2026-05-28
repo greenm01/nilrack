@@ -123,6 +123,31 @@ Adapters map generic event slices to native process input:
 Do not introduce a shared CLAP-like event record. That would make LV2 and VST3
 fit CLAP instead of fitting nilrack.
 
+## Native UI And Heavy Messages
+
+The generic nilrack event queue is for fixed-size host events: parameter edits,
+gestures, MIDI, transport, and compact feedback. It is not a transport for large
+opaque plugin messages.
+
+Native plugin UIs may need format-specific UI-to-DSP communication, such as a
+VST3 message, LV2 atom payload, wavetable edit, or preset blob. The adapter owns
+that path. It may keep its own preallocated queue, reference-counted payload
+store, or format-native message bridge, as long as the callback side remains
+bounded and non-allocating.
+
+Large payload ownership must be explicit:
+
+- the generic `PluginParamValue` queue must not carry blobs;
+- callback-visible pointers must refer to memory with a lifetime at least as
+  long as the process call that consumes them;
+- freeing or replacing payload storage happens outside the callback or through
+  adapter-owned retirement;
+- heavy messages that change plugin ports, params, latency, or state set the
+  appropriate feedback flag for the UI thread.
+
+This keeps the shared event path small while leaving room for format-specific
+native UI behavior.
+
 ## Carla Prior Art and the Data-Oriented Shift
 
 Carla's useful lesson is the host boundary. Its engine speaks to a common

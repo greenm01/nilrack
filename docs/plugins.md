@@ -63,7 +63,7 @@ memory during scan must not affect a running nilrack session.
 ```text
 nilrack forks nilrack-scan --scan-plugin <path>
     |
-    | helper loads plugin
+    | helper loads plugin enough to inspect it
     | extracts descriptor, ports, params, UI caps
     | writes KDL to stdout
     | exits
@@ -74,9 +74,23 @@ nilrack reads KDL result
     +-- non-zero exit or empty output → record as scan-failed
 ```
 
+The scanner extracts descriptors and capabilities only. It must not activate a
+plugin, call process, run audio, open a native editor, or persist plugin state.
+Runtime behavior belongs to the main host lifecycle after the user loads a
+plugin.
+
 Scan results cache to disk in KDL format (via `nimkdl`), keyed by plugin path
 and mtime. nilrack only re-runs the helper when a plugin's mtime changes.
 See [session.md](session.md) for the cache format.
+
+If the helper exits non-zero, crashes, or writes invalid output, nilrack records
+a failed scan entry for that path and mtime. Automatic catalog loading skips that
+entry until the file changes or the user explicitly requests a rescan.
+
+UI capability is scan metadata. The descriptor records whether generated UI,
+native Wayland, XWayland bridge, or no native UI is available. Loaded plugin
+records may copy the needed capability fields, but the scanner is the source for
+catalog capability data.
 
 The helper is the same nilrack binary invoked with a scan flag. It links
 against CLAP, LV2, and VST3 adapter code. A plugin that overflows a buffer

@@ -92,10 +92,33 @@ Audio-to-UI plugin feedback uses snapshots or bounded queues. Typical payloads:
 - gesture begin or end from plugin UI;
 - process error flag;
 - event queue overflow flag;
-- requested restart or process callback.
+- requested restart or process callback;
+- stale event target flag.
 
 The audio callback may set flags and write fixed records. It must not allocate,
 format strings, or log.
+
+## Target Validation
+
+UI-to-audio events are resolved against the current `ProcessPlan`, not against
+`NilrackModel`. This matters after edits such as node delete, plugin reload, or
+session restore. A queue may still contain events produced for the previous
+plan.
+
+The callback validates every target before applying it:
+
+- parameter events require a live `PluginId` and `ParamId` in the current plan;
+- MIDI events require a live destination `PortId` in the current plan;
+- transport events are accepted only by the plan-wide transport slot.
+
+If the target is missing, the callback drops the event and sets a `staleEvent`
+diagnostic flag. Dropping stale events is normal snapshot behavior. The callback
+must not ask the UI thread, inspect `NilrackModel`, or keep a side table owned
+by the application model.
+
+`ProcessPlan` may carry fixed lookup tables or sorted target arrays to make this
+validation bounded. The rule is the same either way: the plan is the only truth
+the audio callback can see.
 
 ## Adapter Translation
 
@@ -141,4 +164,5 @@ must not allocate.
 Session restore may enqueue parameter values after plugin state load if the
 session stores both a state blob and visible param values. State blobs are
 adapter-owned. Parameter events are host-owned. The restore system decides the
-order outside the callback.
+order outside the callback, and stale-target validation still applies after the
+new plan is published.

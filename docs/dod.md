@@ -47,9 +47,10 @@ does not grow a second plugin object model. See
 [plugin-runtime.md](plugin-runtime.md).
 
 Cables follow it too. `CableData` is a passive bus-level relationship between
-two `PortId` values. Routing policy lives in graph compile, where cables become
-channel edges and realtime ops. Entity operations maintain indexes; they do
-not decide audio mixing rules. See [audio-routing.md](audio-routing.md).
+two `PortId` values. User choices about channel mapping live as model data on
+or beside the cable. Graph compile validates that data and expands cables into
+channel edges and realtime ops. Entity operations maintain indexes; they do not
+decide audio mixing rules. See [audio-routing.md](audio-routing.md).
 
 ## Main Loop
 
@@ -221,6 +222,7 @@ type
   RackId* = distinct uint32
   NodeId* = distinct uint32
   CableId* = distinct uint32
+  ChannelMapId* = distinct uint32
   PortId* = distinct uint32
   ParamId* = distinct uint32
   PluginId* = distinct uint32
@@ -289,6 +291,7 @@ type
     racks*: EntityManager[RackId, RackData]
     nodes*: EntityManager[NodeId, NodeData]
     cables*: EntityManager[CableId, CableData]
+    channelMaps*: EntityManager[ChannelMapId, ChannelMapData]
     ports*: EntityManager[PortId, PortData]
     params*: EntityManager[ParamId, ParamData]
     plugins*: EntityManager[PluginId, PluginData]
@@ -299,6 +302,7 @@ type
 
     nodesByRack*: Table[RackId, seq[NodeId]]
     cablesByRack*: Table[RackId, seq[CableId]]
+    channelMapsByRack*: Table[RackId, seq[ChannelMapId]]
     portsByNode*: Table[NodeId, seq[PortId]]
     paramsByNode*: Table[NodeId, seq[ParamId]]
     pluginByNode*: Table[NodeId, PluginId]
@@ -342,6 +346,18 @@ type
     srcPort*: PortId
     dstPort*: PortId
     kind*: PortKind
+    routePolicy*: CableRoutePolicy
+    channelMapId*: ChannelMapId
+
+  ChannelMapEntry* = object
+    srcChannel*: uint32
+    dstChannel*: uint32
+    gain*: float32
+
+  ChannelMapData* = object
+    id*: ChannelMapId
+    rackId*: RackId
+    entries*: seq[ChannelMapEntry]
 
   PortData* = object
     id*: PortId
@@ -364,6 +380,11 @@ type
 Do not add methods like `node.connect()` or `plugin.activate()` to these
 records. Those belong in operations and systems.
 
+`routePolicy` and `channelMapId` are the durable form of explicit routing
+intent. If a user asks for stereo-to-mono sum, right-channel drop, or a custom
+channel map, that choice is data in the model. It is not a hidden UI flag and
+not an inference made by the compiler.
+
 ## Operations
 
 All cross-table mutation goes through operations.
@@ -376,6 +397,9 @@ nodeDestroy
 nodeMove
 cableCreate
 cableDestroy
+cableSetRoutePolicy
+channelMapCreate
+channelMapDestroy
 pluginAttachToNode
 pluginDetach
 paramCreate
@@ -466,10 +490,12 @@ audio callback reads immutable plan
 - ordered node list
 - plugin runtime refs
 - port buffer bindings
-- clear, copy, add, and process ops
+- clear, copy, add, future delay, and process ops
 - event queues
+- event target lookup tables
 - parameter slots
 - bypass/mute flags
+- reported plugin latency
 - meter outputs
 
 The callback must not allocate, log, take locks, scan plugins, open files,
@@ -592,11 +618,13 @@ Examples:
 - every node's rack exists
 - every cable's source and destination ports exist
 - every cable connects compatible port kinds and directions
+- every cable's channel map exists when `channelMapId` is non-null
 - every port's node exists
 - every param's node exists
 - every plugin's node exists
 - every plugin node maps to one plugin
 - every `nodesByRack` row points to existing nodes owned by that rack
+- every `channelMapsByRack` row points to channel maps owned by that rack
 - every `portsByNode` row points to ports owned by that node
 - every `paramsByNode` row points to params owned by that node
 - every plugin UI references an existing plugin
