@@ -1,14 +1,13 @@
 import std/[dynlib, os, strformat, strutils]
 
 import ../types/audio_values
-import ../types/[core, model, plugin_values]
+import ../types/[core, model, plugin_runtime_values, plugin_values]
 import clap_api
+import host_callbacks
 
 type
   ClapHostRuntime = object
-    requestRestartCount: uint32
-    requestProcessCount: uint32
-    requestCallbackCount: uint32
+    callbacks: PluginHostCallbackFlags
 
   ClapHostBox = ref object
     runtime: ClapHostRuntime
@@ -79,20 +78,21 @@ proc hostGetExtension(host: ptr ClapHost, extensionId: cstring): pointer {.cdecl
 proc hostRequestRestart(host: ptr ClapHost) {.cdecl.} =
   if not host.isNil and not host.hostData.isNil:
     let runtime = cast[ptr ClapHostRuntime](host.hostData)
-    inc runtime.requestRestartCount
+    runtime.callbacks.markPluginHostCallback(phcfRestart)
 
 proc hostRequestProcess(host: ptr ClapHost) {.cdecl.} =
   if not host.isNil and not host.hostData.isNil:
     let runtime = cast[ptr ClapHostRuntime](host.hostData)
-    inc runtime.requestProcessCount
+    runtime.callbacks.markPluginHostCallback(phcfProcess)
 
 proc hostRequestCallback(host: ptr ClapHost) {.cdecl.} =
   if not host.isNil and not host.hostData.isNil:
     let runtime = cast[ptr ClapHostRuntime](host.hostData)
-    inc runtime.requestCallbackCount
+    runtime.callbacks.markPluginHostCallback(phcfCallback)
 
 proc newHostBox(): ClapHostBox =
   result = ClapHostBox()
+  result.runtime.callbacks.initPluginHostCallbackFlags()
   result.host = ClapHost(
     clapVersion: clapVersion(),
     hostData: addr result.runtime,

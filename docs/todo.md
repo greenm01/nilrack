@@ -97,7 +97,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
   `ref` objects, or exceptions across the boundary
 - [x] `ProcessContext` bus and event slices match the IPC-friendly shape in
   [plugin-runtime.md](plugin-runtime.md)
-- [ ] Host callback reentrancy: restart, callback, log, param, fd, timer, and
+- [x] Host callback reentrancy: restart, callback, log, param, fd, timer, and
   state-dirty callbacks are flag-setting or bounded-record writes
 - [ ] CLAP fd and timer extension events route to UI or plugin-event thread,
   never the audio callback

@@ -1,3 +1,4 @@
+import std/atomics
 import audio_values
 import core
 
@@ -6,6 +7,22 @@ type
     prsOk
     prsBypass
     prsFailed
+
+  PluginHostCallbackFlag* = enum
+    phcfRestart
+    phcfProcess
+    phcfCallback
+    phcfLog
+    phcfParam
+    phcfFd
+    phcfTimer
+    phcfStateDirty
+
+  PluginHostCallbackFlags* = object
+    bits*: Atomic[uint32]
+
+  PluginHostCallbackSnapshot* = object
+    flags*: set[PluginHostCallbackFlag]
 
   PluginRuntimeActivateProc* = proc(
     runtime: pointer, sampleRate: float64, minFrames, maxFrames: uint32
