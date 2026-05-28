@@ -101,8 +101,15 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
   state-dirty callbacks are flag-setting or bounded-record writes
 - [x] CLAP fd and timer extension events route to UI or plugin-event thread,
   never the audio callback
+- [ ] Published `ProcessPlan` execution calls `PluginRuntimeOps.process` with a
+  `ProcessContext`; remove the legacy `processBlock` shortcut without putting
+  executable adapter logic in `types/`
+- [ ] Shared non-realtime state ops (`saveState`, `loadState`) live on the
+  runtime boundary and delegate to adapter modules
 
 **Update loop hooks**
+- [x] Dedicated update dispatch system owns model mutations and emits commands
+  for platform/audio side effects
 - [x] Committed user action log hook in the `Msg` dispatch path for future undo
 - [x] Effect routing for graph dirty, process-plan dirty, topology refresh,
   diagnostics dirty, and state dirty
@@ -129,8 +136,11 @@ CLAP workflow on top of that foundation.
   unload through the runtime store
 - [x] `src/systems/graph_compile.nim`: one-rack, acyclic graph compile to a
   published `ProcessPlan`
-- [x] `src/systems/graph_process_plan.nim`: build process plan from compiled
-  graph, not only the single-plugin helper
+- [x] `src/systems/graph_process_plan.nim`: build ordered plugin process entries
+  and target lookup tables from the compiled graph, not only the single-plugin
+  helper
+- [ ] Expand compiled bus cables into bounded clear/copy/add/process ops and
+  buffer slots before broader patchbay routing work
 - [x] Plugin node in rack UI: title bar and port slots
 - [x] Plugin node in rack UI: bypass toggle
 - [x] Generated parameter controls: display-only slider rows

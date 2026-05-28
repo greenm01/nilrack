@@ -1,7 +1,7 @@
 import std/options
 
 import ../plugins/clap_host
-import ../state/[model, queries]
+import ../state/[iterators, model, queries]
 import ../types/[audio_values, core, plugin_values]
 import ../types/plugin_runtime_values
 
@@ -110,7 +110,7 @@ proc mainAudioPortForNode(
     m: NilrackModel, nodeId: NodeId, direction: PortDirection
 ): PortData =
   var fallback: PortData
-  for portId in m.portsForNode(nodeId):
+  for portId in m.portIdsForNode(nodeId):
     let port = m.portData(portId)
     if port.isNone or port.get.kind != pkAudio or port.get.direction != direction:
       continue

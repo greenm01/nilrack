@@ -46,12 +46,10 @@ proc contains(rect: Rect, x, y: float32): bool =
   x >= rect.x and x < rect.x + rect.w and y >= rect.y and y < rect.y + rect.h
 
 proc paramSliderAt*(model: NilrackModel, x, y: float32): Option[ParamId] =
-  for node in model.nodes.data:
-    if node.kind != nkPlugin:
-      continue
+  for node in model.pluginNodes:
     var visibleParam = 0
-    for paramId in model.paramsForNode(node.id):
-      let param = model.params.entity(paramId)
+    for paramId in model.paramIdsForNode(node.id):
+      let param = model.paramData(paramId)
       if param.isNone or param.get.hidden:
         continue
       let rect = node.paramSliderRect(visibleParam)
@@ -61,12 +59,10 @@ proc paramSliderAt*(model: NilrackModel, x, y: float32): Option[ParamId] =
   none(ParamId)
 
 proc paramSliderHitAt*(model: NilrackModel, x, y: float32): Option[ParamSliderHit] =
-  for node in model.nodes.data:
-    if node.kind != nkPlugin:
-      continue
+  for node in model.pluginNodes:
     var visibleParam = 0
-    for paramId in model.paramsForNode(node.id):
-      let param = model.params.entity(paramId)
+    for paramId in model.paramIdsForNode(node.id):
+      let param = model.paramData(paramId)
       if param.isNone or param.get.hidden:
         continue
       let rect = node.paramSliderRect(visibleParam)

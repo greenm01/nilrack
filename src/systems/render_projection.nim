@@ -27,10 +27,7 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
   let bypassOff = Color(r: 0.25, g: 0.29, b: 0.31, a: 1.0)
   let bypassOn = Color(r: 0.62, g: 0.30, b: 0.26, a: 1.0)
 
-  for node in model.nodes.data:
-    if node.kind != nkPlugin:
-      continue
-
+  for node in model.pluginNodes:
     let x = node.x
     let y = node.y
     let w = if node.w > 0.0'f32: node.w else: 320.0'f32
@@ -47,14 +44,14 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
 
     let pluginId = model.pluginForNode(node.id)
     if pluginId.isSome:
-      let plugin = model.plugins.entity(pluginId.get)
+      let plugin = model.pluginData(pluginId.get)
       if plugin.isSome and plugin.get.version.len > 0:
         list.addTextRun(
           x + w - 116.0'f32, y + 8.0'f32, shortText(plugin.get.version, 10), mutedText
         )
 
-    for portId in model.portsForNode(node.id):
-      let port = model.ports.entity(portId)
+    for portId in model.portIdsForNode(node.id):
+      let port = model.portData(portId)
       if port.isNone:
         continue
       let p = port.get
@@ -73,8 +70,8 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
         )
 
     var visibleParam = 0
-    for paramId in model.paramsForNode(node.id):
-      let param = model.params.entity(paramId)
+    for paramId in model.paramIdsForNode(node.id):
+      let param = model.paramData(paramId)
       if param.isNone or param.get.hidden:
         continue
       let p = param.get

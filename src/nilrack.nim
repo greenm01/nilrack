@@ -6,13 +6,11 @@ import audio/backend_reconfiguration
 import audio/jack_backend
 import audio/param_event_queue
 import audio/process_callback
-import systems/action_log
 import systems/effect_queue
-import systems/param_mapping
 import systems/plugin_scan
 import systems/render_projection
 import systems/graph_process_plan
-import systems/ui_hit_test
+import systems/update
 import plugins/[clap_host, plugin_adapter]
 import plugins/vst3_host
 
@@ -145,6 +143,7 @@ when isMainModule:
   var frame: NilDrawList
   var committedActions: ActionLog
   var effects: EffectQueue
+  var updateCommands: UpdateCommandQueue
 
   while app.running:
     discard app.pollAndDispatch()
@@ -152,38 +151,24 @@ when isMainModule:
       nilampUi.pumpNilampVst3Ui()
     let msgs = app.drainMsgs()
     for msg in msgs:
-      discard committedActions.recordCommittedAction(msg)
-      discard effects.routeMsgEffects(msg)
-      case msg.kind
-      of msgResize:
-        r.resizeRenderer(msg.resizeW.uint32, msg.resizeH.uint32)
+      model.dispatchMsg(committedActions, effects, updateCommands, msg)
+    var command: UpdateCommand
+    while updateCommands.popUpdateCommand(command):
+      case command.kind
+      of uckResize:
+        r.resizeRenderer(command.width.uint32, command.height.uint32)
         if args.vst3UiSpike:
-          nilampUi.resizeNilampVst3Ui(msg.resizeW, msg.resizeH)
-      of msgKeyPress:
-        if msg.keyCode == 1:
-          app.running = false
-      of msgPointerButton:
-        if msg.btnPressed:
-          let paramHit = model.paramSliderHitAt(msg.btnX, msg.btnY)
-          if paramHit.isSome:
-            let hit = paramHit.get
-            model.paramSetNormalized(hit.paramId, hit.normalizedValue.float64)
-            let param = model.paramData(hit.paramId)
-            if param.isSome:
-              let pluginId = model.pluginForNode(param.get.nodeId)
-              if pluginId.isSome:
-                discard jack.enqueuePluginParamValue(
-                  pluginId.get, hit.paramId, hit.normalizedValue.float64
-                )
-          else:
-            let bypassNode = model.bypassToggleAt(msg.btnX, msg.btnY)
-            if bypassNode.isSome:
-              model.nodeToggleBypass(bypassNode.get)
-              discard jack.publishSingleClapProcessPlan(
-                model, activeAttach, activeDescriptor, activeClap, processPlan
-              )
-      else:
-        discard
+          nilampUi.resizeNilampVst3Ui(command.width, command.height)
+      of uckClose:
+        app.running = false
+      of uckEnqueueParamValue:
+        discard jack.enqueuePluginParamValue(
+          command.pluginId, command.paramId, command.normalizedValue
+        )
+      of uckPublishProcessPlan:
+        discard jack.publishSingleClapProcessPlan(
+          model, activeAttach, activeDescriptor, activeClap, processPlan
+        )
     var effect: Effect
     while effects.popEffect(effect):
       case effect.kind

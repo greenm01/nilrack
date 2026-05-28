@@ -36,3 +36,11 @@ proc portCreate*(
   )
   m.portsByNode.mgetOrPut(nodeId, @[]).add(id)
   id
+
+proc portBindExternalKey*(
+    m: var NilrackModel, pluginId: PluginId, externalIndex: uint32, portId: PortId
+) =
+  if portId == NullPortId or pluginId == NullPluginId:
+    return
+  m.portByExternalKey[ExternalPortKey(pluginId: pluginId, index: externalIndex)] =
+    portId

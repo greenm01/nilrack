@@ -182,9 +182,9 @@ proc compileRackGraph*(
       discard result.reportMissingRuntime(rackId, nodeId, pluginId.get)
       continue
     discard plan.addPluginTarget(pluginId.get)
-    for paramId in m.paramsForNode(nodeId):
+    for paramId in m.paramIdsForNode(nodeId):
       discard plan.addParamTarget(pluginId.get, paramId)
-    for portId in m.portsForNode(nodeId):
+    for portId in m.portIdsForNode(nodeId):
       let port = m.portData(portId)
       if port.isSome and port.get.kind != pkAudio and port.get.direction == pdIn:
         discard plan.addEventPortTarget(portId)

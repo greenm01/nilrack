@@ -33,6 +33,11 @@ proc nodeMove*(m: var NilrackModel, id: NodeId, x, y: float32) =
     m.nodes.mEntity(id).x = x
     m.nodes.mEntity(id).y = y
 
+proc nodeResize*(m: var NilrackModel, id: NodeId, w, h: float32) =
+  if m.nodes.contains(id):
+    m.nodes.mEntity(id).w = w
+    m.nodes.mEntity(id).h = h
+
 proc nodeSetBypassed*(m: var NilrackModel, id: NodeId, bypassed: bool) =
   if m.nodes.contains(id):
     m.nodes.mEntity(id).bypassed = bypassed

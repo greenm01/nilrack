@@ -49,3 +49,15 @@ proc paramSetNormalized*(m: var NilrackModel, id: ParamId, value: float64) =
     return
   let snap = m.params.entity(id).get
   m.params.mEntity(id).currentVal = snap.minVal + value * (snap.maxVal - snap.minVal)
+
+proc paramSetHidden*(m: var NilrackModel, id: ParamId, hidden: bool) =
+  if m.params.contains(id):
+    m.params.mEntity(id).hidden = hidden
+
+proc paramBindExternalKey*(
+    m: var NilrackModel, pluginId: PluginId, externalIndex: uint32, paramId: ParamId
+) =
+  if paramId == NullParamId or pluginId == NullPluginId:
+    return
+  m.paramByExternalKey[ExternalParamKey(pluginId: pluginId, index: externalIndex)] =
+    paramId
