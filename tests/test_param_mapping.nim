@@ -34,3 +34,19 @@ suite "param mapping":
     let hit = model.paramSliderAt(rect.x + 1.0'f32, rect.y + 1.0'f32)
 
     check hit == some(visible)
+
+  test "parameter slider hit carries normalized edit value":
+    var model = NilrackModel()
+    let rackId = model.rackCreate("rack")
+    let nodeId = model.nodeCreate(rackId, nkPlugin, "plugin")
+    model.nodeMove(nodeId, 40.0'f32, 50.0'f32)
+    model.nodes.mEntity(nodeId).w = 370.0'f32
+    let paramId = model.paramCreate(nodeId, "Gain", -12.0, 12.0, 0.0)
+
+    let rect = model.nodes.mEntity(nodeId).paramSliderRect(0)
+    let hit = model.paramSliderHitAt(rect.x + rect.w * 0.75'f32, rect.y + 1.0'f32)
+
+    check hit.isSome
+    check hit.get.paramId == paramId
+    check hit.get.normalizedValue == 0.75'f32
+    check hit.get.value == 6.0

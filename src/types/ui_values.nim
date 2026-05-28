@@ -11,6 +11,12 @@ type
   InputTargetList* = object
     entries*: seq[InputTargetEntry]
 
+  ParamSliderHit* = object
+    paramId*: ParamId
+    rect*: Rect
+    normalizedValue*: float32
+    value*: float64
+
   MsgKind* = enum
     msgNoop
     msgPointerMotion

@@ -4,9 +4,11 @@ import platform/wayland_app
 import render/renderer
 import audio/backend_reconfiguration
 import audio/jack_backend
+import audio/param_event_queue
 import audio/process_callback
 import systems/action_log
 import systems/effect_queue
+import systems/param_mapping
 import systems/render_projection
 import systems/graph_process_plan
 import systems/ui_hit_test
@@ -120,9 +122,21 @@ when isMainModule:
           app.running = false
       of msgPointerButton:
         if msg.btnPressed:
-          let bypassNode = model.bypassToggleAt(msg.btnX, msg.btnY)
-          if bypassNode.isSome:
-            model.nodeToggleBypass(bypassNode.get)
+          let paramHit = model.paramSliderHitAt(msg.btnX, msg.btnY)
+          if paramHit.isSome:
+            let hit = paramHit.get
+            model.paramSetNormalized(hit.paramId, hit.normalizedValue.float64)
+            let param = model.paramData(hit.paramId)
+            if param.isSome:
+              let pluginId = model.pluginForNode(param.get.nodeId)
+              if pluginId.isSome:
+                discard jack.enqueuePluginParamValue(
+                  pluginId.get, hit.paramId, hit.normalizedValue.float64
+                )
+          else:
+            let bypassNode = model.bypassToggleAt(msg.btnX, msg.btnY)
+            if bypassNode.isSome:
+              model.nodeToggleBypass(bypassNode.get)
       else:
         discard
     var effect: Effect

@@ -23,6 +23,7 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
   let portColor = Color(r: 0.28, g: 0.47, b: 0.62, a: 1.0)
   let sliderBg = Color(r: 0.09, g: 0.10, b: 0.11, a: 1.0)
   let sliderFill = Color(r: 0.42, g: 0.68, b: 0.38, a: 1.0)
+  let sliderKnob = Color(r: 0.82, g: 0.86, b: 0.72, a: 1.0)
   let bypassOff = Color(r: 0.25, g: 0.29, b: 0.31, a: 1.0)
   let bypassOn = Color(r: 0.62, g: 0.30, b: 0.26, a: 1.0)
 
@@ -88,10 +89,11 @@ proc layoutPluginNodes(list: var NilDrawList, model: NilrackModel) =
       list.addTextRun(x + 14.0'f32, rowY, shortText(label, 20), text)
       let sx = x + 170.0'f32
       let slider = node.paramSliderRect(visibleParam)
+      let normalized = p.normalizedParamValue()
       list.addRect(slider.x, slider.y, slider.w, slider.h, sliderBg)
-      list.addRect(
-        slider.x, slider.y, slider.w * p.normalizedParamValue(), slider.h, sliderFill
-      )
+      list.addRect(slider.x, slider.y, slider.w * normalized, slider.h, sliderFill)
+      let knobX = slider.x + slider.w * normalized - 2.0'f32
+      list.addRect(knobX, slider.y - 2.0'f32, 4.0'f32, slider.h + 4.0'f32, sliderKnob)
       if p.displayText.len > 0:
         list.addTextRun(
           sx, slider.y + slider.h + 2.0'f32, shortText(p.displayText, 16), mutedText

@@ -1,7 +1,7 @@
 import std/[math, options]
 
 import ../state/engine
-import ../types/core
+import ../types/[core, ui_values]
 
 const
   ParamRowStartY* = 82.0'f32
@@ -59,3 +59,30 @@ proc paramSliderAt*(model: NilrackModel, x, y: float32): Option[ParamId] =
         return some(paramId)
       inc visibleParam
   none(ParamId)
+
+proc paramSliderHitAt*(model: NilrackModel, x, y: float32): Option[ParamSliderHit] =
+  for node in model.nodes.data:
+    if node.kind != nkPlugin:
+      continue
+    var visibleParam = 0
+    for paramId in model.paramsForNode(node.id):
+      let param = model.params.entity(paramId)
+      if param.isNone or param.get.hidden:
+        continue
+      let rect = node.paramSliderRect(visibleParam)
+      if rect.contains(x, y):
+        let normalized =
+          if rect.w <= 0.0'f32:
+            0.0'f32
+          else:
+            clamp01(((x - rect.x) / rect.w).float64)
+        return some(
+          ParamSliderHit(
+            paramId: paramId,
+            rect: rect,
+            normalizedValue: normalized,
+            value: param.get.paramValueFromNormalized(normalized.float64),
+          )
+        )
+      inc visibleParam
+  none(ParamSliderHit)
