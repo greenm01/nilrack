@@ -52,6 +52,53 @@ or beside the cable. Graph compile validates that data and expands cables into
 channel edges and realtime ops. Entity operations maintain indexes; they do not
 decide audio mixing rules. See [audio-routing.md](audio-routing.md).
 
+## DOP Principles In nilrack
+
+Appendix A of `Data-Oriented Programming` maps well to nilrack when translated
+for Nim and realtime audio. The rule is not "use maps everywhere." The rule is
+that data is the thing passed between phases, threads, adapters, and tests.
+
+### Separate Code From Data
+
+Application records are passive schema. `types/` may define IDs, enums, object
+fields, flags, and representation limits. It must not define procs, proc
+aliases, helper behavior, constructors with policy, or runtime call tables.
+
+Code that operates on those records belongs in operation, system, state, audio,
+plugin, renderer, platform, or small support modules. This does not ban procs
+that take nilrack types. It bans hiding those procs inside the data-schema
+module.
+
+### Use Generic Structures Pragmatically
+
+In nilrack, generic data structures mean flat records, typed IDs, dense tables,
+bounded arrays, fixed buffers, `seq`, `Table`, and plain snapshots. They do not
+mean stringly maps in hot paths.
+
+Map-like data belongs at boundaries where flexibility matters: KDL sessions,
+plugin scan output, diagnostics, scripting, and external messages. Runtime
+audio and graph code should prefer typed fields and bounded storage.
+
+### Treat Published Data As Immutable
+
+`NilrackModel` mutates only in the update phase, through entity operations.
+Once data crosses a thread or API boundary, treat it as immutable. That includes
+`ProcessPlan`, draw lists, input targets, session snapshots, plugin scan
+results, diagnostics snapshots, and worker results.
+
+The audio callback reads the current `ProcessPlan` and bounded queues. It does
+not chase the model or patch shared application records.
+
+### Separate Schema From Representation
+
+Nim records describe representation. They are not the whole schema. The schema
+also includes invariants, capacity limits, route policies, validation rules,
+compile errors, and session constraints.
+
+Put those rules in validators, operation preconditions, graph-compile reports,
+tests, and docs. Do not bury them in record methods, constructors, or adapter
+side effects.
+
 ## Main Loop
 
 The UI thread runs a TEA loop. Every event — Wayland input, IPC command, audio
