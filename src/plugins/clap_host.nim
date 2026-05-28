@@ -317,12 +317,51 @@ proc clapRuntimeStopProcessing(
   except CatchableError:
     prsFailed
 
+proc clapProcessAudioBlock*(
+  runtime: pointer, in1, in2, out1, out2: pointer, nframes: uint32, mode: AudioIoMode
+): bool {.gcsafe, raises: [].}
+
+proc busChannel(bus: PluginAudioBus, index: uint32): pointer =
+  if bus.channels.isNil or index >= bus.channelCount:
+    return nil
+  bus.channels[index]
+
 proc clapRuntimeProcess(
     runtime: pointer, context: ptr ProcessContext
 ): PluginRuntimeStatus {.nimcall, gcsafe, raises: [].} =
-  discard runtime
-  discard context
-  prsBypass
+  if context.isNil or context.audioInputBusCount == 0 or context.audioOutputBusCount == 0:
+    return prsBypass
+
+  let input = context.audioInputs[0]
+  let output = context.audioOutputs[0]
+  let mode =
+    if input.channelCount == 1 and output.channelCount == 1:
+      aimMonoLeftToStereo
+    elif input.channelCount >= 2 and output.channelCount >= 2:
+      aimStereo
+    else:
+      aimBypass
+  if mode == aimBypass:
+    return prsBypass
+
+  let in1 = input.busChannel(0)
+  let in2 =
+    if input.channelCount >= 2:
+      input.busChannel(1)
+    else:
+      in1
+  let out1 = output.busChannel(0)
+  let out2 =
+    if output.channelCount >= 2:
+      output.busChannel(1)
+    else:
+      out1
+  if in1.isNil or in2.isNil or out1.isNil or out2.isNil:
+    return prsFailed
+  if clapProcessAudioBlock(runtime, in1, in2, out1, out2, context.frames, mode):
+    prsOk
+  else:
+    prsFailed
 
 proc clapRuntimeDestroy(runtime: pointer) {.nimcall, gcsafe, raises: [].} =
   let loaded = cast[ClapLoadedPlugin](runtime)
@@ -346,7 +385,10 @@ proc clapPluginRuntimeRef*(
     loaded: ClapLoadedPlugin, pluginId: PluginId
 ): PluginRuntimeRef =
   PluginRuntimeRef(
-    pluginId: pluginId, runtime: loaded.clapRuntimePointer(), ops: addr clapRuntimeOps
+    pluginId: pluginId,
+    runtime: loaded.clapRuntimePointer(),
+    ops: addr clapRuntimeOps,
+    processBlock: clapProcessAudioBlock,
   )
 
 proc processStatusOk(status: int32): bool =
@@ -354,7 +396,7 @@ proc processStatusOk(status: int32): bool =
 
 proc clapProcessAudioBlock*(
     runtime: pointer, in1, in2, out1, out2: pointer, nframes: uint32, mode: AudioIoMode
-): bool =
+): bool {.gcsafe, raises: [].} =
   let loaded = cast[ClapLoadedPlugin](runtime)
   if loaded.isNil or loaded.plugin.isNil or not loaded.processing or
       loaded.plugin.process.isNil:

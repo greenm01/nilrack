@@ -4,6 +4,18 @@ import ../src/state/engine
 import ../src/systems/graph_compile
 import ../src/types/[audio_values, core, graph_values, plugin_runtime_values]
 
+proc testProcessBlock(
+    runtime: pointer, in1, in2, out1, out2: pointer, nframes: uint32, mode: AudioIoMode
+): bool {.nimcall, gcsafe, raises: [].} =
+  discard runtime
+  discard in1
+  discard in2
+  discard out1
+  discard out2
+  discard nframes
+  discard mode
+  true
+
 suite "graph compile errors":
   test "records compile errors as bounded UI data":
     var report = initGraphCompileReport(RackId(1))
@@ -63,7 +75,10 @@ suite "graph compile errors":
     )
     discard model.paramCreate(pluginNode, "Gain", 0.0, 1.0, 0.5)
     runtimes.runtimes[0] = PluginRuntimeRef(
-      pluginId: pluginId, runtime: cast[pointer](1), ops: cast[ptr PluginRuntimeOps](1)
+      pluginId: pluginId,
+      runtime: cast[pointer](1),
+      ops: cast[ptr PluginRuntimeOps](1),
+      processBlock: testProcessBlock,
     )
     runtimes.count = 1
 
@@ -122,3 +137,29 @@ suite "graph compile errors":
     check cycleReport.hasCompileErrors
     check cycleReport.errors[0].kind == gceCycleDetected
     check cycleReport.errors[0].cableId in [cycleCable, policyCable]
+
+  test "reports invalid cable endpoints direction and kind":
+    var model = NilrackModel()
+    var runtimes: PluginRuntimeStore
+    let rackId = model.rackCreate("rack")
+    let nodeA = model.nodeCreate(rackId, nkInput, "a")
+    let nodeB = model.nodeCreate(rackId, nkOutput, "b")
+    let audioIn = model.portCreate(nodeA, pkAudio, pdIn, 0, "audio in")
+    let midiOut = model.portCreate(nodeA, pkMidi, pdOut, 0, "midi out")
+    let audioOut = model.portCreate(nodeB, pkAudio, pdOut, 0, "audio out")
+    let audioInB = model.portCreate(nodeB, pkAudio, pdIn, 0, "audio in b")
+
+    let badDirection = model.cableCreate(rackId, audioIn, audioInB)
+    let badKind = model.cableCreate(rackId, midiOut, audioInB)
+    discard model.cableCreate(rackId, PortId(999), audioInB)
+    discard audioOut
+
+    let report = model.compileRackGraph(rackId, runtimes)
+
+    check report.hasCompileErrors
+    check report.errors[0].kind == gceDirectionMismatch
+    check report.errors[0].cableId == badDirection
+    check report.errors[1].kind == gceKindMismatch
+    check report.errors[1].cableId == badKind
+    check report.errors[2].kind == gceMissingPort
+    check report.errors[2].portId == PortId(999)

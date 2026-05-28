@@ -48,6 +48,25 @@ proc parseArgs(): AppArgs =
     stderr.writeLine("nilrack: --clap and --vst3-ui-spike are separate smoke paths")
     quit(1)
 
+proc publishSingleClapProcessPlan(
+    jack: var JackBackend,
+    model: NilrackModel,
+    activeAttach: PluginAttachResult,
+    activeDescriptor: PluginDescriptor,
+    activeClap: ClapLoadedPlugin,
+    processPlan: var ProcessPlan,
+): bool =
+  if activeClap.isNil:
+    return false
+  processPlan = buildSingleClapProcessPlan(
+    activeAttach.nodeId, activeAttach.pluginId, activeDescriptor, activeClap
+  )
+  let node = model.nodeData(activeAttach.nodeId)
+  if node.isSome:
+    processPlan.applyHostNodeState(node.get)
+  discard jack.publishJackProcessPlan(addr processPlan)
+  true
+
 when isMainModule:
   let args = parseArgs()
 
@@ -89,10 +108,9 @@ when isMainModule:
     if not activeClap.startClapProcessing():
       stderr.writeLine("nilrack: failed to start CLAP processing")
       quit(1)
-    processPlan = buildSingleClapProcessPlan(
-      activeAttach.nodeId, activeAttach.pluginId, activeDescriptor, activeClap
+    discard jack.publishSingleClapProcessPlan(
+      model, activeAttach, activeDescriptor, activeClap, processPlan
     )
-    discard jack.publishJackProcessPlan(addr processPlan)
 
   activateJack(jack)
 
@@ -137,6 +155,9 @@ when isMainModule:
             let bypassNode = model.bypassToggleAt(msg.btnX, msg.btnY)
             if bypassNode.isSome:
               model.nodeToggleBypass(bypassNode.get)
+              discard jack.publishSingleClapProcessPlan(
+                model, activeAttach, activeDescriptor, activeClap, processPlan
+              )
       else:
         discard
     var effect: Effect
@@ -156,10 +177,9 @@ when isMainModule:
         activeClap.deactivateClap()
         if activeClap.activateClap(jack.sampleRate.float64, 1, jack.bufferSize) and
             activeClap.startClapProcessing():
-          processPlan = buildSingleClapProcessPlan(
-            activeAttach.nodeId, activeAttach.pluginId, activeDescriptor, activeClap
+          discard jack.publishSingleClapProcessPlan(
+            model, activeAttach, activeDescriptor, activeClap, processPlan
           )
-          discard jack.publishJackProcessPlan(addr processPlan)
         else:
           stderr.writeLine(
             "nilrack: failed to reactivate CLAP plugin after JACK change"

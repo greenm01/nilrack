@@ -98,7 +98,9 @@ type
     startProcessing*: proc(plugin: ptr ClapPlugin): bool {.cdecl, gcsafe, raises: [].}
     stopProcessing*: proc(plugin: ptr ClapPlugin) {.cdecl, gcsafe, raises: [].}
     reset*: proc(plugin: ptr ClapPlugin) {.cdecl.}
-    process*: proc(plugin: ptr ClapPlugin, process: ptr ClapProcess): int32 {.cdecl.}
+    process*: proc(plugin: ptr ClapPlugin, process: ptr ClapProcess): int32 {.
+      cdecl, gcsafe, raises: []
+    .}
     getExtension*: proc(plugin: ptr ClapPlugin, id: cstring): pointer {.cdecl.}
     onMainThread*: proc(plugin: ptr ClapPlugin) {.cdecl.}
 

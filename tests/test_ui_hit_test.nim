@@ -1,6 +1,7 @@
 import std/[options, unittest]
 
 import ../src/state/engine
+import ../src/systems/ui_geometry
 import ../src/systems/ui_hit_test
 
 suite "ui hit test":

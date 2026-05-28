@@ -40,7 +40,7 @@ type
 
   AudioBlockProcessProc* = proc(
     runtime: pointer, in1, in2, out1, out2: pointer, nframes: uint32, mode: AudioIoMode
-  ): bool
+  ): bool {.nimcall, gcsafe, raises: [].}
 
   AudioProcessEntry* = object
     nodeId*: NodeId

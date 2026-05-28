@@ -21,12 +21,12 @@ proc runtimeForPlugin*(
   addr store.runtimes[index]
 
 proc addPluginRuntime*(store: var PluginRuntimeStore, runtime: PluginRuntimeRef): bool =
-  if runtime.pluginId == NullPluginId or runtime.runtime.isNil or runtime.ops.isNil:
+  if runtime.pluginId == NullPluginId or runtime.runtime.isNil or runtime.ops.isNil or
+      runtime.processBlock.isNil:
     return false
   let existing = store.findRuntimeIndex(runtime.pluginId)
   if existing >= 0:
-    store.runtimes[existing] = runtime
-    return true
+    return false
   if store.count >= MaxPluginRuntimes.uint32:
     store.capacityExceeded = true
     return false
@@ -42,18 +42,27 @@ proc removeRuntimeAt(store: var PluginRuntimeStore, index: int): PluginRuntimeRe
   store.runtimes[last] = PluginRuntimeRef()
   dec store.count
 
-proc unloadPluginRuntime*(store: var PluginRuntimeStore, pluginId: PluginId): bool =
+proc retirePluginRuntime*(
+    store: var PluginRuntimeStore,
+    pluginId: PluginId,
+    retiredRuntime: var PluginRuntimeRef,
+): bool =
   let index = store.findRuntimeIndex(pluginId)
   if index < 0:
+    retiredRuntime = PluginRuntimeRef()
     return false
-  let runtime = store.removeRuntimeAt(index)
+  retiredRuntime = store.removeRuntimeAt(index)
+  true
+
+proc destroyPluginRuntime*(runtime: PluginRuntimeRef) =
   if not runtime.ops.isNil and not runtime.ops.destroy.isNil:
     runtime.ops.destroy(runtime.runtime)
-  true
 
 proc loadClapRuntime*(
     store: var PluginRuntimeStore, pluginId: PluginId, pluginPath: string
 ): PluginLifecycleResult =
+  if not store.runtimeForPlugin(pluginId).isNil:
+    return PluginLifecycleResult(ok: false, error: "plugin runtime already exists")
   let loaded = loadClapPlugin(pluginPath)
   if not loaded.ok:
     return PluginLifecycleResult(ok: false, error: loaded.error)

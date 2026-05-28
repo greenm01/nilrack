@@ -56,6 +56,29 @@ proc reportUnsupportedRoutePolicy*(
     )
   )
 
+proc reportMissingPort*(
+    report: var GraphCompileReport, rackId: RackId, cableId: CableId, portId: PortId
+): bool =
+  report.addCompileError(
+    GraphCompileError(
+      kind: gceMissingPort, rackId: rackId, cableId: cableId, portId: portId
+    )
+  )
+
+proc reportDirectionMismatch*(
+    report: var GraphCompileReport, rackId: RackId, cableId: CableId
+): bool =
+  report.addCompileError(
+    GraphCompileError(kind: gceDirectionMismatch, rackId: rackId, cableId: cableId)
+  )
+
+proc reportKindMismatch*(
+    report: var GraphCompileReport, rackId: RackId, cableId: CableId
+): bool =
+  report.addCompileError(
+    GraphCompileError(kind: gceKindMismatch, rackId: rackId, cableId: cableId)
+  )
+
 proc setCompiledPlan*(report: var GraphCompileReport, plan: ProcessPlan) =
   report.plan = plan
   if plan.capacityExceeded:
@@ -65,7 +88,7 @@ proc hasPluginRuntime(store: PluginRuntimeStore, pluginId: PluginId): bool =
   for i in 0 ..< store.count.int:
     let runtime = store.runtimes[i]
     if runtime.pluginId == pluginId and not runtime.runtime.isNil and
-        not runtime.ops.isNil:
+        not runtime.ops.isNil and not runtime.processBlock.isNil:
       return true
   false
 
@@ -101,11 +124,22 @@ proc compileRackGraph*(
 
     let srcPort = m.portData(cableValue.srcPort)
     let dstPort = m.portData(cableValue.dstPort)
-    if srcPort.isNone or dstPort.isNone:
+    if srcPort.isNone:
+      discard result.reportMissingPort(rackId, cableId, cableValue.srcPort)
+      continue
+    if dstPort.isNone:
+      discard result.reportMissingPort(rackId, cableId, cableValue.dstPort)
+      continue
+    if srcPort.get.direction != pdOut or dstPort.get.direction != pdIn:
+      discard result.reportDirectionMismatch(rackId, cableId)
+      continue
+    if srcPort.get.kind != dstPort.get.kind:
+      discard result.reportKindMismatch(rackId, cableId)
       continue
     let srcNode = srcPort.get.nodeId
     let dstNode = dstPort.get.nodeId
     if nodeIds.nodeIndex(srcNode) < 0 or nodeIds.nodeIndex(dstNode) < 0:
+      discard result.reportMissingPort(rackId, cableId, cableValue.srcPort)
       continue
 
     outgoing.mgetOrPut(srcNode, @[]).add((dstNode, cableId))

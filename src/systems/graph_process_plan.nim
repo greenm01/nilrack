@@ -40,6 +40,12 @@ proc addProcessEntry*(plan: var ProcessPlan, entry: AudioProcessEntry): bool =
   discard plan.addPluginTarget(entry.pluginId)
   true
 
+proc applyHostNodeState*(plan: var ProcessPlan, node: NodeData) =
+  for i in 0 ..< plan.entryCount.int:
+    if plan.entries[i].nodeId == node.id:
+      plan.entries[i].active =
+        plan.entries[i].active and not node.bypassed and not node.muted
+
 proc hasParamTarget(plan: ProcessPlan, pluginId: PluginId, paramId: ParamId): bool =
   for i in 0 ..< plan.paramTargetCount.int:
     let target = plan.paramTargets[i]
@@ -142,11 +148,8 @@ proc buildProcessPlanFromCompiledGraph*(
     let pluginId = m.pluginForNode(nodeId)
     if pluginId.isNone:
       continue
-    let plugin = m.pluginData(pluginId.get)
-    if plugin.isNone or plugin.get.api != paClap:
-      continue
     let runtime = runtimes.runtimeForPlugin(pluginId.get)
-    if runtime.runtime.isNil:
+    if runtime.runtime.isNil or runtime.processBlock.isNil:
       continue
     let mode = m.audioIoModeForNode(nodeId)
     discard result.addProcessEntry(
@@ -154,7 +157,7 @@ proc buildProcessPlanFromCompiledGraph*(
         nodeId: nodeId,
         pluginId: pluginId.get,
         runtime: runtime.runtime,
-        processBlock: clapProcessAudioBlock,
+        processBlock: runtime.processBlock,
         ioMode: mode,
         active: mode != aimBypass and not node.get.bypassed and not node.get.muted,
       )

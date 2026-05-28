@@ -4,7 +4,7 @@ import ../types/[core, render_values]
 import ../state/engine
 import ../render/draw_list
 import param_mapping
-import ui_hit_test
+import ui_geometry
 import ui_layout
 
 proc shortText(value: string, maxChars: int): string =

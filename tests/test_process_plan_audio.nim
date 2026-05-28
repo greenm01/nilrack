@@ -18,6 +18,18 @@ proc localClapPath(): string =
     return nilamp
   ""
 
+proc testProcessBlock(
+    runtime: pointer, in1, in2, out1, out2: pointer, nframes: uint32, mode: AudioIoMode
+): bool {.nimcall, gcsafe, raises: [].} =
+  discard runtime
+  discard in1
+  discard in2
+  discard out1
+  discard out2
+  discard nframes
+  discard mode
+  true
+
 suite "process plan audio":
   test "process plan nodes use bounded storage":
     var plan: ProcessPlan
@@ -129,7 +141,10 @@ suite "process plan audio":
       pluginNode, paClap, "/tmp/example.clap", "dev.nilrack.example", "Example"
     )
     runtimes.runtimes[0] = PluginRuntimeRef(
-      pluginId: pluginId, runtime: cast[pointer](1), ops: cast[ptr PluginRuntimeOps](1)
+      pluginId: pluginId,
+      runtime: cast[pointer](1),
+      ops: cast[ptr PluginRuntimeOps](1),
+      processBlock: testProcessBlock,
     )
     runtimes.count = 1
 
@@ -142,7 +157,7 @@ suite "process plan audio":
     check plan.entries[0].nodeId == pluginNode
     check plan.entries[0].pluginId == pluginId
     check plan.entries[0].runtime == cast[pointer](1)
-    check plan.entries[0].processBlock == clapProcessAudioBlock
+    check plan.entries[0].processBlock == testProcessBlock
     check plan.entries[0].ioMode == aimMonoLeftToStereo
     check plan.entries[0].active
 
@@ -162,7 +177,10 @@ suite "process plan audio":
     )
     model.nodes.mEntity(pluginNode).bypassed = true
     runtimes.runtimes[0] = PluginRuntimeRef(
-      pluginId: pluginId, runtime: cast[pointer](1), ops: cast[ptr PluginRuntimeOps](1)
+      pluginId: pluginId,
+      runtime: cast[pointer](1),
+      ops: cast[ptr PluginRuntimeOps](1),
+      processBlock: testProcessBlock,
     )
     runtimes.count = 1
 

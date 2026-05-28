@@ -95,6 +95,7 @@ type
     pluginId*: PluginId
     runtime*: pointer
     ops*: ptr PluginRuntimeOps
+    processBlock*: AudioBlockProcessProc
 
   PluginRuntimeStore* = object
     count*: uint32

@@ -10,6 +10,9 @@ type
     gcePlanCapacityExceeded
     gceMissingRuntime
     gceUnsupportedRoutePolicy
+    gceMissingPort
+    gceDirectionMismatch
+    gceKindMismatch
 
   GraphCompileError* = object
     kind*: GraphCompileErrorKind
