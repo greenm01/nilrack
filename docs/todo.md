@@ -99,7 +99,7 @@ plugin graph grows. See [threads.md](threads.md), [audio.md](audio.md),
   [plugin-runtime.md](plugin-runtime.md)
 - [x] Host callback reentrancy: restart, callback, log, param, fd, timer, and
   state-dirty callbacks are flag-setting or bounded-record writes
-- [ ] CLAP fd and timer extension events route to UI or plugin-event thread,
+- [x] CLAP fd and timer extension events route to UI or plugin-event thread,
   never the audio callback
 
 **Update loop hooks**

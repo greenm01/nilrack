@@ -2,6 +2,8 @@ import std/atomics
 import audio_values
 import core
 
+const MaxPluginEventThreadEvents* = 128
+
 type
   PluginRuntimeStatus* = enum
     prsOk
@@ -23,6 +25,23 @@ type
 
   PluginHostCallbackSnapshot* = object
     flags*: set[PluginHostCallbackFlag]
+
+  PluginEventThreadEventKind* = enum
+    peteClapFdRegister
+    peteClapFdModify
+    peteClapFdUnregister
+    peteClapTimerRegister
+    peteClapTimerUnregister
+
+  PluginEventThreadEvent* = object
+    kind*: PluginEventThreadEventKind
+    pluginId*: PluginId
+    fd*: int32
+    fdFlags*: uint32
+    timerId*: uint32
+    periodMs*: uint32
+
+  PluginEventThreadQueue* = RtQueue[PluginEventThreadEvent, MaxPluginEventThreadEvents]
 
   PluginRuntimeActivateProc* = proc(
     runtime: pointer, sampleRate: float64, minFrames, maxFrames: uint32

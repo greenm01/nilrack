@@ -4,10 +4,15 @@ import ../types/audio_values
 import ../types/[core, model, plugin_runtime_values, plugin_values]
 import clap_api
 import host_callbacks
+import plugin_event_thread_queue
 
 type
   ClapHostRuntime = object
     callbacks: PluginHostCallbackFlags
+    eventQueue: PluginEventThreadQueue
+    nextTimerId: uint32
+    fdSupport: ClapHostPosixFdSupport
+    timerSupport: ClapHostTimerSupport
 
   ClapHostBox = ref object
     runtime: ClapHostRuntime
@@ -70,29 +75,103 @@ proc clapLibraryPath*(pluginPath: string): string =
           base
       result = pluginPath / "Contents" / "MacOS" / libName
 
+proc hostRuntime(host: ptr ClapHost): ptr ClapHostRuntime =
+  if host.isNil or host.hostData.isNil:
+    return nil
+  cast[ptr ClapHostRuntime](host.hostData)
+
 proc hostGetExtension(host: ptr ClapHost, extensionId: cstring): pointer {.cdecl.} =
-  discard host
-  discard extensionId
+  let runtime = hostRuntime(host)
+  if runtime.isNil or extensionId.isNil:
+    return nil
+  let id = $extensionId
+  if id == ClapExtPosixFdSupport:
+    return addr runtime.fdSupport
+  if id == ClapExtTimerSupport:
+    return addr runtime.timerSupport
   nil
 
 proc hostRequestRestart(host: ptr ClapHost) {.cdecl.} =
-  if not host.isNil and not host.hostData.isNil:
-    let runtime = cast[ptr ClapHostRuntime](host.hostData)
+  let runtime = hostRuntime(host)
+  if not runtime.isNil:
     runtime.callbacks.markPluginHostCallback(phcfRestart)
 
 proc hostRequestProcess(host: ptr ClapHost) {.cdecl.} =
-  if not host.isNil and not host.hostData.isNil:
-    let runtime = cast[ptr ClapHostRuntime](host.hostData)
+  let runtime = hostRuntime(host)
+  if not runtime.isNil:
     runtime.callbacks.markPluginHostCallback(phcfProcess)
 
 proc hostRequestCallback(host: ptr ClapHost) {.cdecl.} =
-  if not host.isNil and not host.hostData.isNil:
-    let runtime = cast[ptr ClapHostRuntime](host.hostData)
+  let runtime = hostRuntime(host)
+  if not runtime.isNil:
     runtime.callbacks.markPluginHostCallback(phcfCallback)
+
+proc hostRegisterFd(host: ptr ClapHost, fd: cint, flags: uint32): bool {.cdecl.} =
+  let runtime = hostRuntime(host)
+  if runtime.isNil:
+    return false
+  runtime.eventQueue.enqueuePluginEventThreadEvent(
+    PluginEventThreadEvent(
+      kind: peteClapFdRegister, pluginId: NullPluginId, fd: fd.int32, fdFlags: flags
+    )
+  )
+
+proc hostModifyFd(host: ptr ClapHost, fd: cint, flags: uint32): bool {.cdecl.} =
+  let runtime = hostRuntime(host)
+  if runtime.isNil:
+    return false
+  runtime.eventQueue.enqueuePluginEventThreadEvent(
+    PluginEventThreadEvent(
+      kind: peteClapFdModify, pluginId: NullPluginId, fd: fd.int32, fdFlags: flags
+    )
+  )
+
+proc hostUnregisterFd(host: ptr ClapHost, fd: cint): bool {.cdecl.} =
+  let runtime = hostRuntime(host)
+  if runtime.isNil:
+    return false
+  runtime.eventQueue.enqueuePluginEventThreadEvent(
+    PluginEventThreadEvent(
+      kind: peteClapFdUnregister, pluginId: NullPluginId, fd: fd.int32
+    )
+  )
+
+proc hostRegisterTimer(
+    host: ptr ClapHost, periodMs: uint32, timerId: ptr ClapId
+): bool {.cdecl.} =
+  let runtime = hostRuntime(host)
+  if runtime.isNil or timerId.isNil:
+    return false
+  inc runtime.nextTimerId
+  timerId[] = runtime.nextTimerId
+  runtime.eventQueue.enqueuePluginEventThreadEvent(
+    PluginEventThreadEvent(
+      kind: peteClapTimerRegister,
+      pluginId: NullPluginId,
+      timerId: timerId[],
+      periodMs: periodMs,
+    )
+  )
+
+proc hostUnregisterTimer(host: ptr ClapHost, timerId: ClapId): bool {.cdecl.} =
+  let runtime = hostRuntime(host)
+  if runtime.isNil:
+    return false
+  runtime.eventQueue.enqueuePluginEventThreadEvent(
+    PluginEventThreadEvent(
+      kind: peteClapTimerUnregister, pluginId: NullPluginId, timerId: timerId
+    )
+  )
 
 proc newHostBox(): ClapHostBox =
   result = ClapHostBox()
   result.runtime.callbacks.initPluginHostCallbackFlags()
+  result.runtime.fdSupport = ClapHostPosixFdSupport(
+    registerFd: hostRegisterFd, modifyFd: hostModifyFd, unregisterFd: hostUnregisterFd
+  )
+  result.runtime.timerSupport = ClapHostTimerSupport(
+    registerTimer: hostRegisterTimer, unregisterTimer: hostUnregisterTimer
+  )
   result.host = ClapHost(
     clapVersion: clapVersion(),
     hostData: addr result.runtime,
@@ -176,6 +255,13 @@ proc close*(loaded: ClapLoadedPlugin) =
     loaded.module = nil
   loaded.entry = nil
   loaded.factory = nil
+
+proc popClapHostEvent*(
+    loaded: ClapLoadedPlugin, event: var PluginEventThreadEvent
+): bool =
+  if loaded.isNil or loaded.hostBox.isNil:
+    return false
+  loaded.hostBox.runtime.eventQueue.dequeuePluginEventThreadEvent(event)
 
 proc descriptorFromClap(
     pluginPath: string, desc: ptr ClapPluginDescriptor

@@ -11,6 +11,8 @@ const
   ClapExtParams* = "clap.params"
   ClapExtState* = "clap.state"
   ClapExtAudioPortsConfig* = "clap.audio-ports-config"
+  ClapExtPosixFdSupport* = "clap.posix-fd-support"
+  ClapExtTimerSupport* = "clap.timer-support"
   ClapPortMono* = "mono"
   ClapPortStereo* = "stereo"
 
@@ -70,6 +72,16 @@ type
     requestRestart*: proc(host: ptr ClapHost) {.cdecl.}
     requestProcess*: proc(host: ptr ClapHost) {.cdecl.}
     requestCallback*: proc(host: ptr ClapHost) {.cdecl.}
+
+  ClapHostPosixFdSupport* {.bycopy.} = object
+    registerFd*: proc(host: ptr ClapHost, fd: cint, flags: uint32): bool {.cdecl.}
+    modifyFd*: proc(host: ptr ClapHost, fd: cint, flags: uint32): bool {.cdecl.}
+    unregisterFd*: proc(host: ptr ClapHost, fd: cint): bool {.cdecl.}
+
+  ClapHostTimerSupport* {.bycopy.} = object
+    registerTimer*:
+      proc(host: ptr ClapHost, periodMs: uint32, timerId: ptr ClapId): bool {.cdecl.}
+    unregisterTimer*: proc(host: ptr ClapHost, timerId: ClapId): bool {.cdecl.}
 
   ClapPlugin* {.bycopy.} = object
     desc*: ptr ClapPluginDescriptor
